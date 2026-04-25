@@ -37,14 +37,19 @@ export async function POST(request: Request) {
     await put(SITE_DATA_FILE, JSON.stringify(data, null, 2), {
       access: "public",
       addRandomSuffix: false,
+      allowOverwrite: true,
       contentType: "application/json",
     });
 
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("POST /api/site-data failed:", error);
+
     return NextResponse.json(
-      { success: false, error: "Failed to save site data." },
+      {
+        success: false,
+        error: "Failed to save site data.",
+      },
       { status: 500 }
     );
   }
