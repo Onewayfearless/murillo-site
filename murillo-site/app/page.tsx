@@ -117,9 +117,9 @@ phoneNumber: DEFAULT_PHONE,
 zelleContact: "your-zelle@email.com",
 
 heroBadge: "Licensed & Insured General Contractor",
-heroTitleLine1: "Luxury Homes",
-heroTitleLine2: "Done Once.",
-heroAccent: "Done Once.",
+heroTitleLine1: "Home Remolding",
+heroTitleLine2: "Murillo Renovation LLC.",
+heroAccent: "Murillo Renovation LLC.",
 heroSubtitle:
 "Premium remodeling, renovation, and custom construction with a clean process, strong communication, and results that feel expensive.",
 
@@ -129,9 +129,9 @@ backgroundBrightness: 0.45,
 heroSectionBackgroundImage: null,
 heroSectionOverlay: 0.58,
 
-servicesTitle: "Everything the site should sell",
+servicesTitle: "Our Services",
 servicesSubtitle:
-"Keep the homepage premium with strong service blocks, direct action buttons, and clear customer paths.",
+"What we do.",
 
 portfolioTitle: "Selected work",
 portfolioSubtitle:
