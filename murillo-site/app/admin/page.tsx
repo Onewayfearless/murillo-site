@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type CSSProperties } from "react";
+import { useRouter } from "next/navigation";
 
-type PortfolioCategory =
+type Category =
 | "Kitchen Remodel"
 | "Bathroom Remodel"
 | "Flooring Project"
@@ -10,12 +11,14 @@ type PortfolioCategory =
 | "Repair Work"
 | "Renovation";
 
-type BlobImage = {
+type MediaItem = {
 id: string;
-url: string;
-pathname: string;
-alt: string;
-createdAt: string;
+url?: string;
+src?: string;
+pathname?: string;
+alt?: string;
+name?: string;
+createdAt?: string;
 };
 
 type ReviewItem = {
@@ -23,7 +26,7 @@ id: string;
 name: string;
 rating: number;
 text: string;
-photos: BlobImage[];
+photos: MediaItem[];
 date: string;
 };
 
@@ -45,11 +48,11 @@ amount: string;
 name: string;
 email: string;
 notes: string;
-proofs: BlobImage[];
+proofs: MediaItem[];
 date: string;
 };
 
-type SiteContent = {
+type SiteData = {
 businessName: string;
 phoneNumber: string;
 zelleContact: string;
@@ -59,22 +62,16 @@ heroTitleLine1: string;
 heroTitleLine2: string;
 heroSubtitle: string;
 
-heroBackgroundUrl: string;
-heroBackgroundBrightness: number;
-heroPanelImageTop: string;
-heroPanelImageBottom: string;
+backgroundImage: MediaItem | null;
+heroSectionBackgroundImage: MediaItem | null;
+heroTopImage: MediaItem | null;
+heroBottomImage: MediaItem | null;
+
+backgroundBrightness: number;
+heroSectionOverlay: number;
 
 startCardTitle: string;
 startCardText: string;
-
-stat1Value: string;
-stat1Label: string;
-stat2Value: string;
-stat2Label: string;
-stat3Value: string;
-stat3Label: string;
-stat4Value: string;
-stat4Label: string;
 
 servicesTitle: string;
 servicesSubtitle: string;
@@ -94,23 +91,37 @@ faqSubtitle: string;
 quickTitle: string;
 quickSubtitle: string;
 
-ctaBadge: string;
 ctaTitle: string;
 ctaText: string;
-};
 
-type SiteData = {
-content: SiteContent;
-portfolio: Record<PortfolioCategory, BlobImage[]>;
+stat1Value: string;
+stat1Label: string;
+stat2Value: string;
+stat2Label: string;
+stat3Value: string;
+stat3Label: string;
+stat4Value: string;
+stat4Label: string;
+
+portfolio: Record<Category, MediaItem[]>;
 reviews: ReviewItem[];
 visits: VisitItem[];
 payments: PaymentItem[];
-updatedAt: string;
 };
 
-const ADMIN_PASSWORD = "murillo123";
+type SitePayload = {
+content?: Record<string, unknown>;
+portfolio?: Partial<Record<Category, unknown>>;
+reviews?: unknown[];
+visits?: unknown[];
+payments?: unknown[];
+updatedAt?: string;
+[key: string]: unknown;
+};
 
-const CATEGORIES: PortfolioCategory[] = [
+type Tab = "content" | "images" | "portfolio" | "reviews" | "visits" | "payments" | "preview";
+
+const CATEGORIES: Category[] = [
 "Kitchen Remodel",
 "Bathroom Remodel",
 "Flooring Project",
@@ -119,77 +130,11 @@ const CATEGORIES: PortfolioCategory[] = [
 "Renovation",
 ];
 
-const SERVICES = [
-{
-title: "Kitchen Remodeling",
-description:
-"Cabinets, counters, tile, lighting, floors, and layout improvements that make the home feel brand new.",
-},
-{
-title: "Bathroom Remodeling",
-description:
-"Showers, tubs, vanities, tile work, plumbing finish work, and clean upscale finishes.",
-},
-{
-title: "Flooring & Tile",
-description:
-"Vinyl, hardwood, laminate, tile, grout, transitions, and repair work for a crisp finished look.",
-},
-{
-title: "Drywall & Painting",
-description:
-"Patch repair, texture matching, interior repainting, and detailed clean walls and ceilings.",
-},
-{
-title: "Repairs & Maintenance",
-description:
-"Fast turnaround work for damaged areas, small fixes, trim, doors, framing, and general punch lists.",
-},
-{
-title: "Full Renovation",
-description:
-"Bigger jobs with a clean process from quote to finish, including scheduling, updates, and follow-up.",
-},
-];
+const DEFAULT_PHONE = "+14043893672";
 
-const FAQ_ITEMS = [
-{
-q: "How does the request visit button work?",
-a: "It opens the form only when clicked. Submitting saves the request and can notify the owner if your visit API is connected.",
-},
-{
-q: "How does the payment button work?",
-a: "It opens the Zelle payment panel only when clicked, with screenshot upload and review submission.",
-},
-{
-q: "Can customers add review photos?",
-a: "Yes. Reviews can include uploaded photos and those photos show in the review section.",
-},
-{
-q: "Where does portfolio go?",
-a: "It goes to the dedicated gallery page so the homepage stays clean and premium.",
-},
-];
-
-function uid() {
-return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function emptyPortfolio(): Record<PortfolioCategory, BlobImage[]> {
-return {
-"Kitchen Remodel": [],
-"Bathroom Remodel": [],
-"Flooring Project": [],
-"Custom Build": [],
-"Repair Work": [],
-Renovation: [],
-};
-}
-
-const DEFAULT_SITE_DATA: SiteData = {
-content: {
+const DEFAULT_SITE: SiteData = {
 businessName: "Murillo Renovations LLC",
-phoneNumber: "+16785551234",
+phoneNumber: DEFAULT_PHONE,
 zelleContact: "your-zelle@email.com",
 
 heroBadge: "Licensed & Insured General Contractor",
@@ -198,14 +143,41 @@ heroTitleLine2: "Done Once.",
 heroSubtitle:
 "Premium remodeling, renovation, and custom construction with a clean process, strong communication, and results that feel expensive.",
 
-heroBackgroundUrl: "",
-heroBackgroundBrightness: 0.42,
-heroPanelImageTop: "",
-heroPanelImageBottom: "",
+backgroundImage: null,
+heroSectionBackgroundImage: null,
+heroTopImage: null,
+heroBottomImage: null,
+
+backgroundBrightness: 0.45,
+heroSectionOverlay: 0.58,
 
 startCardTitle: "Quote, visit, or pay in one place.",
 startCardText:
 "Customers can send a message, upload pictures, book a site visit, leave a review, or submit payment proof.",
+
+servicesTitle: "Everything the site should sell",
+servicesSubtitle:
+"Keep the homepage premium with strong service blocks, direct action buttons, and clear customer paths.",
+
+portfolioTitle: "Selected work",
+portfolioSubtitle:
+"The full portfolio lives on its own page and each category can hold as many images as you want.",
+
+reviewsTitle: "What clients say",
+reviewsSubtitle: "Show real reviews on the page and let customers upload photos with them.",
+
+aboutTitle: "A contractor brand built to feel premium.",
+aboutSubtitle:
+"Murillo Renovations LLC handles remodeling, repairs, custom projects, and high-impact home improvements with a clean process from start to finish.",
+
+faqTitle: "Common questions",
+faqSubtitle: "Keep answers short, useful, and easy to scan.",
+
+quickTitle: "Quick actions",
+quickSubtitle: "The homepage should always keep a customer one click away from the next step.",
+
+ctaTitle: "Book a visit, get a quote, or make a payment.",
+ctaText: "Use the buttons above to keep the customer flow fast and clean.",
 
 stat1Value: "100+",
 stat1Label: "projects",
@@ -216,417 +188,391 @@ stat3Label: "response",
 stat4Value: "Clean",
 stat4Label: "process",
 
-servicesTitle: "Everything the site should sell",
-servicesSubtitle:
-"Keep the homepage premium with strong service blocks, direct action buttons, and clear customer paths.",
-
-portfolioTitle: "Selected work",
-portfolioSubtitle:
-"This page is the gallery preview. The full portfolio lives on its own page, and each category can hold as many images as you want.",
-
-reviewsTitle: "What clients say",
-reviewsSubtitle:
-"Show real reviews on the page and let customers upload photos with them.",
-
-aboutTitle: "A contractor brand built to feel premium.",
-aboutSubtitle:
-"Murillo Renovations LLC handles remodeling, repairs, custom projects, and high-impact home improvements with a clean process from start to finish.",
-
-faqTitle: "Common questions",
-faqSubtitle: "Keep answers short, useful, and easy to scan.",
-
-quickTitle: "Quick actions",
-quickSubtitle:
-"The homepage should always keep a customer one click away from the next step.",
-
-ctaBadge: "Ready to start",
-ctaTitle: "Book a visit, get a quote, or make a payment.",
-ctaText: "Use the buttons above to keep the customer flow fast and clean.",
+portfolio: {
+"Kitchen Remodel": [],
+"Bathroom Remodel": [],
+"Flooring Project": [],
+"Custom Build": [],
+"Repair Work": [],
+Renovation: [],
 },
-portfolio: emptyPortfolio(),
+
 reviews: [],
 visits: [],
 payments: [],
-updatedAt: new Date().toISOString(),
 };
 
-function isObject(value: unknown): value is Record<string, unknown> {
-return typeof value === "object" && value !== null;
+function uid() {
+return `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function normalizeImageArray(value: unknown): BlobImage[] {
-if (!Array.isArray(value)) return [];
-return value
-.map((item) => {
-if (typeof item === "string") {
+function getRecord(value: unknown): Record<string, unknown> {
+return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function mediaUrl(item?: MediaItem | null) {
+if (!item) return "";
+return item.url || item.src || "";
+}
+
+function toMediaItem(value: unknown): MediaItem | null {
+if (!value) return null;
+
+if (typeof value === "string" && value.trim()) {
 return {
 id: uid(),
-url: item,
-pathname: item,
+url: value.trim(),
+src: value.trim(),
+name: "image",
 alt: "image",
 createdAt: new Date().toISOString(),
-} satisfies BlobImage;
+};
 }
 
-if (!isObject(item)) return null;
+if (typeof value !== "object") return null;
+
+const raw = value as Record<string, unknown>;
+
+const url =
+typeof raw.url === "string"
+? raw.url
+: typeof raw.src === "string"
+? raw.src
+: "";
+
+if (!url && typeof raw.id !== "string") return null;
 
 return {
-id: typeof item.id === "string" ? item.id : uid(),
-url: typeof item.url === "string" ? item.url : "",
-pathname: typeof item.pathname === "string" ? item.pathname : "",
-alt: typeof item.alt === "string" ? item.alt : "image",
+id: typeof raw.id === "string" ? raw.id : uid(),
+url,
+src: typeof raw.src === "string" ? raw.src : url,
+pathname: typeof raw.pathname === "string" ? raw.pathname : "",
+alt:
+typeof raw.alt === "string"
+? raw.alt
+: typeof raw.name === "string"
+? raw.name
+: "image",
+name:
+typeof raw.name === "string"
+? raw.name
+: typeof raw.alt === "string"
+? raw.alt
+: "image",
 createdAt:
-typeof item.createdAt === "string" ? item.createdAt : new Date().toISOString(),
-} satisfies BlobImage;
-})
-.filter((item): item is BlobImage => Boolean(item?.url));
+typeof raw.createdAt === "string" ? raw.createdAt : new Date().toISOString(),
+};
 }
 
-function normalizeSiteData(input: unknown): SiteData {
-const raw = isObject(input) ? input : {};
-const contentRaw = isObject(raw.content) ? raw.content : {};
-const portfolioRaw = isObject(raw.portfolio) ? raw.portfolio : {};
-
-const portfolio = emptyPortfolio();
-for (const category of CATEGORIES) {
-portfolio[category] = normalizeImageArray(portfolioRaw[category]);
+function normalizeMediaArray(value: unknown): MediaItem[] {
+if (!Array.isArray(value)) return [];
+return value.map(toMediaItem).filter((item): item is MediaItem => Boolean(item && mediaUrl(item)));
 }
 
-const reviews = Array.isArray(raw.reviews)
-? raw.reviews
-.map((item) => {
-if (!isObject(item)) return null;
+function getString(obj: Record<string, unknown>, keys: string[], fallback: string) {
+for (const key of keys) {
+const value = obj[key];
+if (typeof value === "string" && value.trim()) return value.trim();
+}
+return fallback;
+}
+
+function getNumber(obj: Record<string, unknown>, keys: string[], fallback: number) {
+for (const key of keys) {
+const value = obj[key];
+if (typeof value === "number" && Number.isFinite(value)) return value;
+if (typeof value === "string" && value.trim() && !Number.isNaN(Number(value))) return Number(value);
+}
+return fallback;
+}
+
+function firstMedia(obj: Record<string, unknown>, keys: string[]) {
+for (const key of keys) {
+const media = toMediaItem(obj[key]);
+if (media && mediaUrl(media)) return media;
+}
+return null;
+}
+
+function normalizeReview(value: unknown): ReviewItem | null {
+if (!value || typeof value !== "object") return null;
+
+const raw = value as Record<string, unknown>;
+
 return {
-id: typeof item.id === "string" ? item.id : uid(),
-name: typeof item.name === "string" ? item.name : "",
+id: typeof raw.id === "string" ? raw.id : uid(),
+name: typeof raw.name === "string" ? raw.name : "",
 rating:
-typeof item.rating === "number"
-? Math.max(1, Math.min(5, item.rating))
-: 5,
-text: typeof item.text === "string" ? item.text : "",
-photos: normalizeImageArray(item.photos),
-date: typeof item.date === "string" ? item.date : new Date().toLocaleString(),
-} satisfies ReviewItem;
-})
-.filter((item): item is ReviewItem => Boolean(item))
-: [];
+typeof raw.rating === "number"
+? Math.max(1, Math.min(5, raw.rating))
+: Math.max(1, Math.min(5, Number(raw.rating) || 5)),
+text: typeof raw.text === "string" ? raw.text : "",
+photos: normalizeMediaArray(raw.photos),
+date: typeof raw.date === "string" ? raw.date : new Date().toLocaleString(),
+};
+}
 
-const visits = Array.isArray(raw.visits)
-? raw.visits
-.map((item) => {
-if (!isObject(item)) return null;
+function normalizeVisit(value: unknown): VisitItem | null {
+if (!value || typeof value !== "object") return null;
+
+const raw = value as Record<string, unknown>;
+
 return {
-id: typeof item.id === "string" ? item.id : uid(),
-name: typeof item.name === "string" ? item.name : "",
-email: typeof item.email === "string" ? item.email : "",
-phone: typeof item.phone === "string" ? item.phone : "",
-address: typeof item.address === "string" ? item.address : "",
-jobType: typeof item.jobType === "string" ? item.jobType : "",
-preferredTime:
-typeof item.preferredTime === "string" ? item.preferredTime : "",
-details: typeof item.details === "string" ? item.details : "",
-date: typeof item.date === "string" ? item.date : new Date().toLocaleString(),
-} satisfies VisitItem;
-})
-.filter((item): item is VisitItem => Boolean(item))
-: [];
+id: typeof raw.id === "string" ? raw.id : uid(),
+name: typeof raw.name === "string" ? raw.name : "",
+email: typeof raw.email === "string" ? raw.email : "",
+phone: typeof raw.phone === "string" ? raw.phone : "",
+address: typeof raw.address === "string" ? raw.address : "",
+jobType: typeof raw.jobType === "string" ? raw.jobType : "",
+preferredTime: typeof raw.preferredTime === "string" ? raw.preferredTime : "",
+details: typeof raw.details === "string" ? raw.details : "",
+date: typeof raw.date === "string" ? raw.date : new Date().toLocaleString(),
+};
+}
 
-const payments = Array.isArray(raw.payments)
-? raw.payments
-.map((item) => {
-if (!isObject(item)) return null;
+function normalizePayment(value: unknown): PaymentItem | null {
+if (!value || typeof value !== "object") return null;
+
+const raw = value as Record<string, unknown>;
+
 return {
-id: typeof item.id === "string" ? item.id : uid(),
-amount: typeof item.amount === "string" ? item.amount : "",
-name: typeof item.name === "string" ? item.name : "",
-email: typeof item.email === "string" ? item.email : "",
-notes: typeof item.notes === "string" ? item.notes : "",
-proofs: normalizeImageArray(item.proofs),
-date: typeof item.date === "string" ? item.date : new Date().toLocaleString(),
-} satisfies PaymentItem;
-})
-.filter((item): item is PaymentItem => Boolean(item))
+id: typeof raw.id === "string" ? raw.id : uid(),
+amount: typeof raw.amount === "string" ? raw.amount : "",
+name: typeof raw.name === "string" ? raw.name : "",
+email: typeof raw.email === "string" ? raw.email : "",
+notes: typeof raw.notes === "string" ? raw.notes : "",
+proofs: normalizeMediaArray(raw.proofs),
+date: typeof raw.date === "string" ? raw.date : new Date().toLocaleString(),
+};
+}
+
+function normalizeSiteData(payloadInput: unknown): SiteData {
+const payload = getRecord(payloadInput);
+const content = payload.content && typeof payload.content === "object" ? getRecord(payload.content) : payload;
+
+const portfolioSource =
+Object.keys(getRecord(payload.portfolio)).length > 0
+? getRecord(payload.portfolio)
+: getRecord(content.portfolio);
+
+const portfolio: Record<Category, MediaItem[]> = {
+"Kitchen Remodel": [],
+"Bathroom Remodel": [],
+"Flooring Project": [],
+"Custom Build": [],
+"Repair Work": [],
+Renovation: [],
+};
+
+for (const category of CATEGORIES) {
+portfolio[category] = normalizeMediaArray(portfolioSource[category]);
+}
+
+const backgroundImage =
+firstMedia(content, ["backgroundImage", "backgroundUrl", "backgroundImageUrl", "heroBackgroundUrl"]) ||
+null;
+
+const heroSectionBackgroundImage =
+firstMedia(content, [
+"heroSectionBackgroundImage",
+"heroSectionBackgroundUrl",
+"heroBackgroundImage",
+"heroBackgroundUrl",
+"backgroundImage",
+"backgroundUrl",
+"backgroundImageUrl",
+]) || backgroundImage;
+
+const heroTopImage =
+firstMedia(content, ["heroTopImage", "heroImageTop", "rightCardTopImage", "topImage", "topImageUrl"]) ||
+null;
+
+const heroBottomImage =
+firstMedia(content, [
+"heroBottomImage",
+"heroImageBottom",
+"rightCardBottomImage",
+"bottomImage",
+"bottomImageUrl",
+]) || null;
+
+const reviewsRaw =
+Array.isArray(payload.reviews)
+? payload.reviews
+: Array.isArray(content.reviews)
+? content.reviews
 : [];
 
+const visitsRaw =
+Array.isArray(payload.visits)
+? payload.visits
+: Array.isArray(content.visits)
+? content.visits
+: [];
+
+const paymentsRaw =
+Array.isArray(payload.payments)
+? payload.payments
+: Array.isArray(content.payments)
+? content.payments
+: [];
+
+return {
+...DEFAULT_SITE,
+
+businessName: getString(content, ["businessName"], DEFAULT_SITE.businessName),
+phoneNumber: getString(content, ["phoneNumber", "phone"], DEFAULT_SITE.phoneNumber),
+zelleContact: getString(content, ["zelleContact", "zelle"], DEFAULT_SITE.zelleContact),
+
+heroBadge: getString(content, ["heroBadge"], DEFAULT_SITE.heroBadge),
+heroTitleLine1: getString(content, ["heroTitleLine1", "heroTitle1"], DEFAULT_SITE.heroTitleLine1),
+heroTitleLine2: getString(content, ["heroTitleLine2", "heroTitle2"], DEFAULT_SITE.heroTitleLine2),
+heroSubtitle: getString(content, ["heroSubtitle", "subtitle"], DEFAULT_SITE.heroSubtitle),
+
+backgroundImage,
+heroSectionBackgroundImage,
+heroTopImage,
+heroBottomImage,
+
+backgroundBrightness: getNumber(content, ["backgroundBrightness"], DEFAULT_SITE.backgroundBrightness),
+heroSectionOverlay: getNumber(content, ["heroSectionOverlay", "heroOverlay"], DEFAULT_SITE.heroSectionOverlay),
+
+startCardTitle: getString(content, ["startCardTitle", "quickStartTitle"], DEFAULT_SITE.startCardTitle),
+startCardText: getString(content, ["startCardText", "quickStartText"], DEFAULT_SITE.startCardText),
+
+servicesTitle: getString(content, ["servicesTitle"], DEFAULT_SITE.servicesTitle),
+servicesSubtitle: getString(content, ["servicesSubtitle"], DEFAULT_SITE.servicesSubtitle),
+
+portfolioTitle: getString(content, ["portfolioTitle"], DEFAULT_SITE.portfolioTitle),
+portfolioSubtitle: getString(content, ["portfolioSubtitle"], DEFAULT_SITE.portfolioSubtitle),
+
+reviewsTitle: getString(content, ["reviewsTitle"], DEFAULT_SITE.reviewsTitle),
+reviewsSubtitle: getString(content, ["reviewsSubtitle"], DEFAULT_SITE.reviewsSubtitle),
+
+aboutTitle: getString(content, ["aboutTitle"], DEFAULT_SITE.aboutTitle),
+aboutSubtitle: getString(content, ["aboutSubtitle"], DEFAULT_SITE.aboutSubtitle),
+
+faqTitle: getString(content, ["faqTitle"], DEFAULT_SITE.faqTitle),
+faqSubtitle: getString(content, ["faqSubtitle"], DEFAULT_SITE.faqSubtitle),
+
+quickTitle: getString(content, ["quickTitle"], DEFAULT_SITE.quickTitle),
+quickSubtitle: getString(content, ["quickSubtitle"], DEFAULT_SITE.quickSubtitle),
+
+ctaTitle: getString(content, ["ctaTitle"], DEFAULT_SITE.ctaTitle),
+ctaText: getString(content, ["ctaText"], DEFAULT_SITE.ctaText),
+
+stat1Value: getString(content, ["stat1Value", "stat1"], DEFAULT_SITE.stat1Value),
+stat1Label: getString(content, ["stat1Label"], DEFAULT_SITE.stat1Label),
+stat2Value: getString(content, ["stat2Value", "stat2"], DEFAULT_SITE.stat2Value),
+stat2Label: getString(content, ["stat2Label"], DEFAULT_SITE.stat2Label),
+stat3Value: getString(content, ["stat3Value", "stat3"], DEFAULT_SITE.stat3Value),
+stat3Label: getString(content, ["stat3Label"], DEFAULT_SITE.stat3Label),
+stat4Value: getString(content, ["stat4Value", "stat4"], DEFAULT_SITE.stat4Value),
+stat4Label: getString(content, ["stat4Label"], DEFAULT_SITE.stat4Label),
+
+portfolio,
+reviews: reviewsRaw.map(normalizeReview).filter((item): item is ReviewItem => Boolean(item)),
+visits: visitsRaw.map(normalizeVisit).filter((item): item is VisitItem => Boolean(item)),
+payments: paymentsRaw.map(normalizePayment).filter((item): item is PaymentItem => Boolean(item)),
+};
+}
+
+function makePayload(site: SiteData): SitePayload {
 return {
 content: {
-...DEFAULT_SITE_DATA.content,
-...Object.fromEntries(
-Object.keys(DEFAULT_SITE_DATA.content).map((key) => [
-key,
-typeof contentRaw[key] === "string" || typeof contentRaw[key] === "number"
-? contentRaw[key]
-: DEFAULT_SITE_DATA.content[key as keyof SiteContent],
-]),
-),
-} as SiteContent,
-portfolio,
-reviews,
-visits,
-payments,
-updatedAt:
-typeof raw.updatedAt === "string" ? raw.updatedAt : new Date().toISOString(),
+businessName: site.businessName,
+phoneNumber: site.phoneNumber,
+zelleContact: site.zelleContact,
+
+heroBadge: site.heroBadge,
+heroTitleLine1: site.heroTitleLine1,
+heroTitleLine2: site.heroTitleLine2,
+heroSubtitle: site.heroSubtitle,
+
+backgroundImage: site.backgroundImage,
+heroSectionBackgroundImage: site.heroSectionBackgroundImage,
+heroTopImage: site.heroTopImage,
+heroBottomImage: site.heroBottomImage,
+
+backgroundBrightness: site.backgroundBrightness,
+heroSectionOverlay: site.heroSectionOverlay,
+
+startCardTitle: site.startCardTitle,
+startCardText: site.startCardText,
+
+servicesTitle: site.servicesTitle,
+servicesSubtitle: site.servicesSubtitle,
+
+portfolioTitle: site.portfolioTitle,
+portfolioSubtitle: site.portfolioSubtitle,
+
+reviewsTitle: site.reviewsTitle,
+reviewsSubtitle: site.reviewsSubtitle,
+
+aboutTitle: site.aboutTitle,
+aboutSubtitle: site.aboutSubtitle,
+
+faqTitle: site.faqTitle,
+faqSubtitle: site.faqSubtitle,
+
+quickTitle: site.quickTitle,
+quickSubtitle: site.quickSubtitle,
+
+ctaTitle: site.ctaTitle,
+ctaText: site.ctaText,
+
+stat1Value: site.stat1Value,
+stat1Label: site.stat1Label,
+stat2Value: site.stat2Value,
+stat2Label: site.stat2Label,
+stat3Value: site.stat3Value,
+stat3Label: site.stat3Label,
+stat4Value: site.stat4Value,
+stat4Label: site.stat4Label,
+},
+portfolio: site.portfolio,
+reviews: site.reviews,
+visits: site.visits,
+payments: site.payments,
+updatedAt: new Date().toISOString(),
 };
 }
 
-function stars(rating: number) {
-return "★★★★★".slice(0, rating) + "☆☆☆☆☆".slice(0, Math.max(0, 5 - rating));
-}
-
-function Shell({
-children,
-className = "",
-}: {
-children: ReactNode;
-className?: string;
-}) {
-return (
-<div
-className={`rounded-[2rem] border border-white/10 bg-white/[0.05] backdrop-blur-xl ${className}`}
->
-{children}
-</div>
-);
-}
-
-function Button({
-children,
-onClick,
-type = "button",
-variant = "dark",
-disabled = false,
-className = "",
-}: {
-children: ReactNode;
-onClick?: () => void;
-type?: "button" | "submit";
-variant?: "light" | "dark" | "danger";
-disabled?: boolean;
-className?: string;
-}) {
-const variants = {
-light: "bg-white text-black hover:bg-white/90",
-dark: "border border-white/10 bg-white/5 text-white hover:bg-white/10",
-danger: "border border-red-500/30 bg-red-500/10 text-red-200 hover:bg-red-500/20",
-};
-
-return (
-<button
-type={type}
-disabled={disabled}
-onClick={onClick}
-className={`rounded-full px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${variants[variant]} ${className}`}
->
-{children}
-</button>
-);
-}
-
-function Field({
-label,
-value,
-onChange,
-placeholder = "",
-multiline = false,
-}: {
-label: string;
-value: string;
-onChange: (next: string) => void;
-placeholder?: string;
-multiline?: boolean;
-}) {
-return (
-<label className="grid gap-2">
-<span className="text-xs font-semibold uppercase tracking-[0.25em] text-white/45">
-{label}
-</span>
-{multiline ? (
-<textarea
-value={value}
-onChange={(e) => onChange(e.target.value)}
-placeholder={placeholder}
-className="min-h-28 rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none"
-/>
-) : (
-<input
-value={value}
-onChange={(e) => onChange(e.target.value)}
-placeholder={placeholder}
-className="rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none"
-/>
-)}
-</label>
-);
-}
-
-function SectionHeading({
-eyebrow,
-title,
-text,
-}: {
-eyebrow: string;
-title: string;
-text: string;
-}) {
-return (
-<div>
-<p className="text-xs uppercase tracking-[0.35em] text-white/45">{eyebrow}</p>
-<h2 className="mt-3 text-3xl font-black md:text-5xl">{title}</h2>
-<p className="mt-3 max-w-3xl text-sm leading-7 text-white/65">{text}</p>
-</div>
-);
-}
-
-function ImageTile({
-img,
-onDelete,
-onOpen,
-}: {
-img: BlobImage;
-onDelete?: () => void;
-onOpen?: () => void;
-}) {
-return (
-<div className="overflow-hidden rounded-[1.5rem] border border-white/10 bg-black/40">
-<button type="button" onClick={onOpen} className="block w-full">
-<img src={img.url} alt={img.alt} className="h-44 w-full object-cover" />
-</button>
-<div className="flex items-center justify-between gap-3 p-3">
-<div className="min-w-0">
-<p className="truncate text-sm font-medium">{img.alt}</p>
-<p className="truncate text-xs text-white/45">{img.pathname}</p>
-</div>
-{onDelete ? (
-<Button variant="danger" onClick={onDelete}>
-Delete
-</Button>
-) : null}
-</div>
-</div>
-);
-}
-
-export default function AdminPage() {
-const [site, setSite] = useState<SiteData>(DEFAULT_SITE_DATA);
-const [ready, setReady] = useState(false);
-const [unlocked, setUnlocked] = useState(false);
-const [passwordInput, setPasswordInput] = useState("");
-const [tab, setTab] = useState<
-"content" | "portfolio" | "reviews" | "visits" | "payments"
->("content");
-const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop");
-const [selectedCategory, setSelectedCategory] =
-useState<PortfolioCategory>("Kitchen Remodel");
-const [loading, setLoading] = useState(false);
-const [saving, setSaving] = useState(false);
-const [notice, setNotice] = useState("");
-const [previewImage, setPreviewImage] = useState<string | null>(null);
-
-const [reviewDraft, setReviewDraft] = useState({
-name: "",
-rating: "5",
-text: "",
-});
-const [reviewPhotos, setReviewPhotos] = useState<BlobImage[]>([]);
-
-useEffect(() => {
-const unlockedNow =
-typeof window !== "undefined" &&
-sessionStorage.getItem("murillo_admin_unlocked") === "yes";
-
-if (unlockedNow) {
-setUnlocked(true);
-}
-
-void loadSite();
-}, []);
-
-const portfolioPreviewCards = useMemo(() => {
-return CATEGORIES.map((category) => {
-const firstImage = site.portfolio[category][0];
-const textMap: Record<PortfolioCategory, string> = {
-"Kitchen Remodel":
-"Before and after kitchen setups, cabinets, counters, and clean finish work.",
-"Bathroom Remodel":
-"Modern bathroom work, tile, vanity, shower detail, and polished upgrades.",
-"Flooring Project":
-"Flooring replacement, transitions, tile installs, and repair work.",
-"Custom Build":
-"Custom interiors, framing, built-ins, and unique customer project layouts.",
-"Repair Work":
-"Punch list, patch repair, drywall fixes, and fast maintenance solutions.",
-Renovation:
-"Full renovation service with a premium look and customer-friendly process.",
-};
-
-return {
-title: category,
-image: firstImage?.url || "",
-text: textMap[category],
-};
-});
-}, [site.portfolio]);
-
-function showNotice(message: string) {
-setNotice(message);
-window.setTimeout(() => setNotice(""), 2500);
-}
-
-async function loadSite() {
+async function loadSite(): Promise<SiteData> {
 try {
-setLoading(true);
 const res = await fetch("/api/site-data", { cache: "no-store" });
 if (!res.ok) throw new Error("Failed to load site data.");
 const json = await res.json();
-const normalized = normalizeSiteData(json?.data ?? json);
-setSite(normalized);
+return normalizeSiteData(json?.data ?? json);
 } catch (error) {
-console.error(error);
-showNotice("Could not load saved site data. Using defaults.");
-setSite(DEFAULT_SITE_DATA);
-} finally {
-setLoading(false);
-setReady(true);
+console.error("Admin load failed:", error);
+return DEFAULT_SITE;
 }
 }
 
-async function saveSite(nextSite?: SiteData) {
-try {
-setSaving(true);
-const payload = nextSite ?? site;
-
+async function saveSite(site: SiteData) {
 const res = await fetch("/api/site-data", {
 method: "POST",
-headers: { "Content-Type": "application/json" },
-body: JSON.stringify({ data: payload }),
+headers: {
+"Content-Type": "application/json",
+},
+body: JSON.stringify({
+data: makePayload(site),
+}),
 });
 
 if (!res.ok) {
 const json = await res.json().catch(() => ({}));
-throw new Error(json?.error || "Failed to save site data.");
-}
-
-showNotice("Saved.");
-} catch (error) {
-console.error(error);
-showNotice("Save failed.");
-} finally {
-setSaving(false);
+throw new Error(json?.error || "Save failed.");
 }
 }
 
-async function uploadImages(
-input: FileList | File[] | null | undefined,
-folder: string,
-): Promise<BlobImage[]> {
-const files =
-input instanceof FileList ? Array.from(input) : Array.from(input ?? []);
+async function uploadFiles(files: FileList | null, folder: string): Promise<MediaItem[]> {
+if (!files?.length) return [];
 
-if (!files.length) return [];
+const uploaded: MediaItem[] = [];
 
-const uploaded: BlobImage[] = [];
-
-for (const file of files) {
+for (const file of Array.from(files)) {
 const formData = new FormData();
 formData.append("file", file);
 formData.append("folder", folder);
@@ -637,6 +583,7 @@ body: formData,
 });
 
 const json = await res.json().catch(() => ({}));
+
 if (!res.ok || !json?.url) {
 throw new Error(json?.error || `Upload failed for ${file.name}`);
 }
@@ -644,7 +591,9 @@ throw new Error(json?.error || `Upload failed for ${file.name}`);
 uploaded.push({
 id: uid(),
 url: String(json.url),
+src: String(json.url),
 pathname: String(json.pathname || json.url),
+name: file.name,
 alt: file.name,
 createdAt: new Date().toISOString(),
 });
@@ -653,1333 +602,962 @@ createdAt: new Date().toISOString(),
 return uploaded;
 }
 
-function updateContent<K extends keyof SiteContent>(key: K, value: SiteContent[K]) {
-setSite((prev) => ({
-...prev,
-content: { ...prev.content, [key]: value },
-updatedAt: new Date().toISOString(),
-}));
+function Field({
+label,
+value,
+onChange,
+textarea = false,
+placeholder = "",
+}: {
+label: string;
+value: string;
+onChange: (value: string) => void;
+textarea?: boolean;
+placeholder?: string;
+}) {
+return (
+<label className="block">
+<span className="mb-2 block text-[11px] font-bold uppercase tracking-[0.28em] text-white/45">
+{label}
+</span>
+
+{textarea ? (
+<textarea
+value={value}
+onChange={(event) => onChange(event.target.value)}
+placeholder={placeholder}
+className="min-h-28 w-full rounded-2xl border border-white/10 bg-black/35 p-4 text-sm text-white outline-none"
+/>
+) : (
+<input
+value={value}
+onChange={(event) => onChange(event.target.value)}
+placeholder={placeholder}
+className="w-full rounded-2xl border border-white/10 bg-black/35 p-4 text-sm text-white outline-none"
+/>
+)}
+</label>
+);
 }
 
-function replaceSite(next: SiteData) {
-setSite({
-...next,
-updatedAt: new Date().toISOString(),
+function NumberSlider({
+label,
+value,
+min,
+max,
+step,
+onChange,
+}: {
+label: string;
+value: number;
+min: number;
+max: number;
+step: number;
+onChange: (value: number) => void;
+}) {
+return (
+<label className="block">
+<span className="mb-2 block text-[11px] font-bold uppercase tracking-[0.28em] text-white/45">
+{label}: {value}
+</span>
+<input
+type="range"
+value={value}
+min={min}
+max={max}
+step={step}
+onChange={(event) => onChange(Number(event.target.value))}
+className="w-full"
+/>
+</label>
+);
+}
+
+function MediaPreview({ item }: { item: MediaItem | null }) {
+const src = mediaUrl(item);
+
+if (!src) {
+return (
+<div className="flex h-40 items-center justify-center rounded-2xl border border-dashed border-white/15 bg-black/25 text-sm text-white/45">
+No image
+</div>
+);
+}
+
+return (
+<img
+src={src}
+alt={item?.alt || item?.name || "image"}
+className="h-40 w-full rounded-2xl border border-white/10 object-cover"
+/>
+);
+}
+
+function UploadButton({
+label,
+folder,
+onUploaded,
+}: {
+label: string;
+folder: string;
+onUploaded: (items: MediaItem[]) => void;
+}) {
+const [busy, setBusy] = useState(false);
+
+async function handleFiles(event: ChangeEvent<HTMLInputElement>) {
+try {
+setBusy(true);
+const uploaded = await uploadFiles(event.target.files, folder);
+onUploaded(uploaded);
+event.target.value = "";
+} catch (error) {
+alert(error instanceof Error ? error.message : "Upload failed.");
+} finally {
+setBusy(false);
+}
+}
+
+return (
+<label className="inline-flex cursor-pointer items-center justify-center rounded-full border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white hover:bg-white/10">
+{busy ? "Uploading..." : label}
+<input type="file" multiple accept="image/*" className="hidden" onChange={handleFiles} />
+</label>
+);
+}
+
+function SingleImageEditor({
+title,
+item,
+folder,
+onChange,
+}: {
+title: string;
+item: MediaItem | null;
+folder: string;
+onChange: (item: MediaItem | null) => void;
+}) {
+const [url, setUrl] = useState(mediaUrl(item));
+
+useEffect(() => {
+setUrl(mediaUrl(item));
+}, [item]);
+
+return (
+<div className="rounded-[1.5rem] border border-white/10 bg-white/[0.04] p-4">
+<h3 className="font-bold">{title}</h3>
+
+<div className="mt-4">
+<MediaPreview item={item} />
+</div>
+
+<div className="mt-4 flex flex-wrap gap-2">
+<UploadButton
+label="Upload image"
+folder={folder}
+onUploaded={(items) => {
+if (items[0]) onChange(items[0]);
+}}
+/>
+
+<button
+type="button"
+onClick={() => onChange(null)}
+className="rounded-full border border-white/10 px-4 py-3 text-sm text-white/75"
+>
+Remove
+</button>
+</div>
+
+<div className="mt-4">
+<Field
+label="Image URL"
+value={url}
+onChange={(value) => {
+setUrl(value);
+onChange(value.trim() ? toMediaItem(value) : null);
+}}
+placeholder="Paste image URL"
+/>
+</div>
+</div>
+);
+}
+
+function ImageCard({
+image,
+onRemove,
+}: {
+image: MediaItem;
+onRemove: () => void;
+}) {
+return (
+<div className="overflow-hidden rounded-2xl border border-white/10 bg-black/25">
+<img src={mediaUrl(image)} alt={image.alt || image.name || "image"} className="h-36 w-full object-cover" />
+<div className="flex items-center justify-between gap-2 p-3">
+<p className="truncate text-xs text-white/55">{image.name || image.alt || "image"}</p>
+<button
+type="button"
+onClick={onRemove}
+className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/70"
+>
+Delete
+</button>
+</div>
+</div>
+);
+}
+
+function AdminCard({
+title,
+subtitle,
+children,
+}: {
+title: string;
+subtitle?: string;
+children: React.ReactNode;
+}) {
+return (
+<section className="rounded-[2rem] border border-white/10 bg-white/[0.05] p-5 shadow-[0_10px_50px_rgba(0,0,0,0.25)] backdrop-blur-xl md:p-7">
+<div className="mb-5">
+<h2 className="text-2xl font-black">{title}</h2>
+{subtitle ? <p className="mt-2 text-sm leading-6 text-white/60">{subtitle}</p> : null}
+</div>
+{children}
+</section>
+);
+}
+
+function phoneHref(phone: string) {
+return `tel:${phone.replace(/[^\d+]/g, "")}`;
+}
+
+export default function AdminPage() {
+const router = useRouter();
+
+const [site, setSite] = useState<SiteData>(DEFAULT_SITE);
+const [tab, setTab] = useState<Tab>("content");
+const [ready, setReady] = useState(false);
+const [saving, setSaving] = useState(false);
+const [notice, setNotice] = useState("");
+
+useEffect(() => {
+let mounted = true;
+
+loadSite().then((loaded) => {
+if (!mounted) return;
+setSite(loaded);
+setReady(true);
 });
-}
 
-async function handleBackgroundUpload(file: File | null) {
-if (!file) return;
-try {
-showNotice("Uploading background...");
-const [img] = await uploadImages([file], "backgrounds");
-updateContent("heroBackgroundUrl", img.url);
-showNotice("Background uploaded. Click Save.");
-} catch (error) {
-console.error(error);
-showNotice("Background upload failed.");
-}
-}
-
-async function handleHeroPanelUpload(position: "top" | "bottom", file: File | null) {
-if (!file) return;
-try {
-showNotice("Uploading image...");
-const [img] = await uploadImages([file], "hero");
-if (position === "top") updateContent("heroPanelImageTop", img.url);
-if (position === "bottom") updateContent("heroPanelImageBottom", img.url);
-showNotice("Image uploaded. Click Save.");
-} catch (error) {
-console.error(error);
-showNotice("Hero image upload failed.");
-}
-}
-
-async function handlePortfolioUpload(
-category: PortfolioCategory,
-files: FileList | null,
-) {
-if (!files?.length) return;
-
-try {
-showNotice("Uploading portfolio images...");
-const uploaded = await uploadImages(files, `portfolio/${slugify(category)}`);
-setSite((prev) => ({
-...prev,
-portfolio: {
-...prev.portfolio,
-[category]: [...uploaded, ...prev.portfolio[category]],
-},
-updatedAt: new Date().toISOString(),
-}));
-showNotice(`${uploaded.length} image(s) uploaded. Click Save.`);
-} catch (error) {
-console.error(error);
-showNotice("Portfolio upload failed.");
-}
-}
-
-function removePortfolioImage(category: PortfolioCategory, id: string) {
-setSite((prev) => ({
-...prev,
-portfolio: {
-...prev.portfolio,
-[category]: prev.portfolio[category].filter((img) => img.id !== id),
-},
-updatedAt: new Date().toISOString(),
-}));
-}
-
-async function handleReviewPhotoUpload(files: FileList | null) {
-if (!files?.length) return;
-try {
-showNotice("Uploading review photos...");
-const uploaded = await uploadImages(files, "reviews");
-setReviewPhotos((prev) => [...prev, ...uploaded]);
-showNotice(`${uploaded.length} review photo(s) uploaded.`);
-} catch (error) {
-console.error(error);
-showNotice("Review photo upload failed.");
-}
-}
-
-function addReview() {
-if (!reviewDraft.name.trim() || !reviewDraft.text.trim()) {
-showNotice("Add review name and text.");
-return;
-}
-
-const newReview: ReviewItem = {
-id: uid(),
-name: reviewDraft.name.trim(),
-rating: Math.max(1, Math.min(5, Number(reviewDraft.rating) || 5)),
-text: reviewDraft.text.trim(),
-photos: reviewPhotos,
-date: new Date().toLocaleString(),
+return () => {
+mounted = false;
 };
+}, []);
 
-setSite((prev) => ({
-...prev,
-reviews: [newReview, ...prev.reviews],
-updatedAt: new Date().toISOString(),
-}));
+useEffect(() => {
+if (!notice) return;
+const timer = window.setTimeout(() => setNotice(""), 2500);
+return () => window.clearTimeout(timer);
+}, [notice]);
 
-setReviewDraft({ name: "", rating: "5", text: "" });
-setReviewPhotos([]);
-showNotice("Review added. Click Save.");
-}
+const allImages = useMemo(() => {
+return CATEGORIES.flatMap((category) => site.portfolio[category]).filter((item) => mediaUrl(item));
+}, [site.portfolio]);
 
-function deleteReview(id: string) {
-setSite((prev) => ({
-...prev,
-reviews: prev.reviews.filter((review) => review.id !== id),
-updatedAt: new Date().toISOString(),
-}));
-}
+const pageBg = mediaUrl(site.backgroundImage) || mediaUrl(site.heroSectionBackgroundImage);
 
-function deleteVisit(id: string) {
-setSite((prev) => ({
-...prev,
-visits: prev.visits.filter((item) => item.id !== id),
-updatedAt: new Date().toISOString(),
-}));
-}
-
-function deletePayment(id: string) {
-setSite((prev) => ({
-...prev,
-payments: prev.payments.filter((item) => item.id !== id),
-updatedAt: new Date().toISOString(),
-}));
-}
-
-function unlockAdmin() {
-if (passwordInput !== ADMIN_PASSWORD) {
-showNotice("Wrong password.");
-return;
-}
-
-setUnlocked(true);
-sessionStorage.setItem("murillo_admin_unlocked", "yes");
-}
-
-function logoutAdmin() {
-setUnlocked(false);
-setPasswordInput("");
-sessionStorage.removeItem("murillo_admin_unlocked");
-}
-
-const previewWidthClass =
-previewMode === "mobile" ? "mx-auto max-w-[390px]" : "w-full";
-
-const heroBackgroundStyle: CSSProperties = site.content.heroBackgroundUrl
+const bgStyle: CSSProperties = pageBg
 ? {
-backgroundImage: `url(${site.content.heroBackgroundUrl})`,
+backgroundImage: `linear-gradient(180deg, rgba(0,0,0,.72), rgba(0,0,0,.9)), url(${pageBg})`,
 backgroundSize: "cover",
 backgroundPosition: "center",
 }
 : {
 background:
-"radial-gradient(circle at top left, rgba(59,130,246,0.20), transparent 28%), radial-gradient(circle at top right, rgba(34,197,94,0.14), transparent 22%), linear-gradient(180deg, rgba(255,255,255,0.04), rgba(0,0,0,0))",
+"radial-gradient(circle at top left, rgba(59,130,246,.18), transparent 28%), radial-gradient(circle at top right, rgba(34,197,94,.14), transparent 28%), #030303",
 };
+
+function update<K extends keyof SiteData>(key: K, value: SiteData[K]) {
+setSite((prev) => ({
+...prev,
+[key]: value,
+}));
+}
+
+async function saveNow(nextSite = site) {
+try {
+setSaving(true);
+setNotice("Saving...");
+await saveSite(nextSite);
+setNotice("Saved worldwide.");
+} catch (error) {
+console.error(error);
+setNotice("Save failed.");
+} finally {
+setSaving(false);
+}
+}
+
+async function reloadNow() {
+setReady(false);
+const loaded = await loadSite();
+setSite(loaded);
+setReady(true);
+setNotice("Reloaded.");
+}
+
+function addReview() {
+setSite((prev) => ({
+...prev,
+reviews: [
+{
+id: uid(),
+name: "New Customer",
+rating: 5,
+text: "Great work and clean process.",
+photos: [],
+date: new Date().toLocaleString(),
+},
+...prev.reviews,
+],
+}));
+}
+
+function addVisit() {
+setSite((prev) => ({
+...prev,
+visits: [
+{
+id: uid(),
+name: "New Visit",
+email: "",
+phone: "",
+address: "",
+jobType: "",
+preferredTime: "",
+details: "",
+date: new Date().toLocaleString(),
+},
+...prev.visits,
+],
+}));
+}
+
+function addPayment() {
+setSite((prev) => ({
+...prev,
+payments: [
+{
+id: uid(),
+amount: "",
+name: "New Payment",
+email: "",
+notes: "",
+proofs: [],
+date: new Date().toLocaleString(),
+},
+...prev.payments,
+],
+}));
+}
 
 if (!ready) {
 return (
-<div className="min-h-screen bg-black px-6 py-10 text-white">
-<Shell className="mx-auto max-w-3xl p-8 text-center">
+<main className="min-h-screen bg-black p-5 text-white">
+<div className="mx-auto max-w-4xl rounded-3xl border border-white/10 bg-white/5 p-6">
 Loading admin...
-</Shell>
 </div>
-);
-}
-
-if (!unlocked) {
-return (
-<div className="min-h-screen bg-black px-4 py-10 text-white md:px-8">
-<div className="mx-auto max-w-xl">
-<Shell className="p-8">
-<p className="text-xs uppercase tracking-[0.35em] text-white/45">Admin</p>
-<h1 className="mt-3 text-4xl font-black">Unlock editor</h1>
-<p className="mt-3 text-sm leading-7 text-white/65">
-Enter the admin password to open the live editor.
-</p>
-
-<div className="mt-6 grid gap-4">
-<input
-type="password"
-value={passwordInput}
-onChange={(e) => setPasswordInput(e.target.value)}
-placeholder="Password"
-className="rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none"
-/>
-<Button variant="light" onClick={unlockAdmin}>
-Open Admin
-</Button>
-</div>
-
-{notice ? (
-<div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm">
-{notice}
-</div>
-) : null}
-
-<p className="mt-5 text-xs text-white/45">
-This is a UI lock for now. Real security needs middleware or auth.
-</p>
-</Shell>
-</div>
-</div>
+</main>
 );
 }
 
 return (
-<div className="min-h-screen bg-black text-white">
-<style jsx global>{`
-html {
-scroll-behavior: smooth;
-}
-`}</style>
-
-<header className="sticky top-0 z-50 border-b border-white/10 bg-black/85 backdrop-blur-xl">
-<div className="mx-auto flex max-w-[1800px] flex-wrap items-center justify-between gap-3 px-4 py-4 md:px-8">
+<main className="min-h-screen text-white" style={bgStyle}>
+<div className="mx-auto max-w-7xl px-4 py-5 md:px-8">
+<header className="sticky top-0 z-40 mb-6 rounded-[2rem] border border-white/10 bg-black/70 p-4 backdrop-blur-2xl">
+<div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 <div>
 <p className="text-xs uppercase tracking-[0.35em] text-white/45">Murillo Admin</p>
-<h1 className="text-lg font-bold">{site.content.businessName}</h1>
+<h1 className="text-2xl font-black">{site.businessName}</h1>
 </div>
 
 <div className="flex flex-wrap gap-2">
-<Button
-variant={tab === "content" ? "light" : "dark"}
-onClick={() => setTab("content")}
+{(["content", "images", "portfolio", "reviews", "visits", "payments", "preview"] as Tab[]).map(
+(item) => (
+<button
+key={item}
+type="button"
+onClick={() => setTab(item)}
+className={`rounded-full px-4 py-2 text-sm font-semibold ${
+tab === item ? "bg-white text-black" : "border border-white/10 bg-white/5 text-white"
+}`}
 >
-Content
-</Button>
-<Button
-variant={tab === "portfolio" ? "light" : "dark"}
-onClick={() => setTab("portfolio")}
->
-Portfolio
-</Button>
-<Button
-variant={tab === "reviews" ? "light" : "dark"}
-onClick={() => setTab("reviews")}
->
-Reviews
-</Button>
-<Button
-variant={tab === "visits" ? "light" : "dark"}
-onClick={() => setTab("visits")}
->
-Visits
-</Button>
-<Button
-variant={tab === "payments" ? "light" : "dark"}
-onClick={() => setTab("payments")}
->
-Payments
-</Button>
+{item[0].toUpperCase() + item.slice(1)}
+</button>
+)
+)}
 </div>
 
 <div className="flex flex-wrap gap-2">
-<Button onClick={() => void loadSite()} disabled={loading}>
-{loading ? "Refreshing..." : "Refresh"}
-</Button>
-<Button variant="light" onClick={() => void saveSite()} disabled={saving}>
-{saving ? "Saving..." : "Save Website"}
-</Button>
-<Button variant="danger" onClick={logoutAdmin}>
-Logout
-</Button>
+<button
+type="button"
+onClick={() => saveNow()}
+disabled={saving}
+className="rounded-full bg-emerald-400 px-5 py-3 text-sm font-black text-black disabled:opacity-60"
+>
+{saving ? "Saving..." : "Save Worldwide"}
+</button>
+
+<button
+type="button"
+onClick={reloadNow}
+className="rounded-full border border-white/10 px-5 py-3 text-sm font-semibold"
+>
+Reload
+</button>
+
+<button
+type="button"
+onClick={() => router.push("/")}
+className="rounded-full border border-white/10 px-5 py-3 text-sm font-semibold"
+>
+View Site
+</button>
 </div>
 </div>
+
+{notice ? (
+<div className="mt-4 rounded-2xl border border-white/10 bg-white/10 p-3 text-sm">{notice}</div>
+) : null}
 </header>
 
-<main className="mx-auto grid max-w-[1800px] gap-6 px-4 py-6 md:px-8 xl:grid-cols-[560px_minmax(0,1fr)]">
-<div className="space-y-6">
-{notice ? (
-<Shell className="p-4 text-sm text-white/85">{notice}</Shell>
-) : null}
+{tab === "content" && (
+<div className="grid gap-5">
+<AdminCard title="Business + hero" subtitle="Edit your main homepage words. These save worldwide.">
+<div className="grid gap-4 md:grid-cols-2">
+<Field label="Business name" value={site.businessName} onChange={(value) => update("businessName", value)} />
+<Field label="Phone number" value={site.phoneNumber} onChange={(value) => update("phoneNumber", value)} />
+<Field label="Zelle contact" value={site.zelleContact} onChange={(value) => update("zelleContact", value)} />
+<Field label="Hero badge" value={site.heroBadge} onChange={(value) => update("heroBadge", value)} />
+<Field label="Hero title line 1" value={site.heroTitleLine1} onChange={(value) => update("heroTitleLine1", value)} />
+<Field label="Hero title line 2" value={site.heroTitleLine2} onChange={(value) => update("heroTitleLine2", value)} />
+<div className="md:col-span-2">
+<Field
+label="Hero subtitle"
+value={site.heroSubtitle}
+textarea
+onChange={(value) => update("heroSubtitle", value)}
+/>
+</div>
+</div>
+</AdminCard>
 
-{tab === "content" ? (
-<>
-<Shell className="p-6">
-<h2 className="text-2xl font-bold">Business + hero</h2>
-<p className="mt-2 text-sm text-white/60">
-Edit the hero section and background image for the homepage.
-</p>
+<AdminCard title="Homepage sections" subtitle="Edit section titles, subtitles, and call-to-action wording.">
+<div className="grid gap-4 md:grid-cols-2">
+<Field label="Start card title" value={site.startCardTitle} onChange={(value) => update("startCardTitle", value)} />
+<Field label="Start card text" value={site.startCardText} textarea onChange={(value) => update("startCardText", value)} />
 
-<div className="mt-6 grid gap-4">
-<Field
-label="Business Name"
-value={site.content.businessName}
-onChange={(next) => updateContent("businessName", next)}
+<Field label="Services title" value={site.servicesTitle} onChange={(value) => update("servicesTitle", value)} />
+<Field label="Services subtitle" value={site.servicesSubtitle} textarea onChange={(value) => update("servicesSubtitle", value)} />
+
+<Field label="Portfolio title" value={site.portfolioTitle} onChange={(value) => update("portfolioTitle", value)} />
+<Field label="Portfolio subtitle" value={site.portfolioSubtitle} textarea onChange={(value) => update("portfolioSubtitle", value)} />
+
+<Field label="Reviews title" value={site.reviewsTitle} onChange={(value) => update("reviewsTitle", value)} />
+<Field label="Reviews subtitle" value={site.reviewsSubtitle} textarea onChange={(value) => update("reviewsSubtitle", value)} />
+
+<Field label="About title" value={site.aboutTitle} onChange={(value) => update("aboutTitle", value)} />
+<Field label="About subtitle" value={site.aboutSubtitle} textarea onChange={(value) => update("aboutSubtitle", value)} />
+
+<Field label="FAQ title" value={site.faqTitle} onChange={(value) => update("faqTitle", value)} />
+<Field label="FAQ subtitle" value={site.faqSubtitle} textarea onChange={(value) => update("faqSubtitle", value)} />
+
+<Field label="Quick title" value={site.quickTitle} onChange={(value) => update("quickTitle", value)} />
+<Field label="Quick subtitle" value={site.quickSubtitle} textarea onChange={(value) => update("quickSubtitle", value)} />
+
+<Field label="Green CTA title" value={site.ctaTitle} onChange={(value) => update("ctaTitle", value)} />
+<Field label="Green CTA text" value={site.ctaText} textarea onChange={(value) => update("ctaText", value)} />
+</div>
+</AdminCard>
+
+<AdminCard title="Stats">
+<div className="grid gap-4 md:grid-cols-4">
+<Field label="Stat 1 value" value={site.stat1Value} onChange={(value) => update("stat1Value", value)} />
+<Field label="Stat 1 label" value={site.stat1Label} onChange={(value) => update("stat1Label", value)} />
+<Field label="Stat 2 value" value={site.stat2Value} onChange={(value) => update("stat2Value", value)} />
+<Field label="Stat 2 label" value={site.stat2Label} onChange={(value) => update("stat2Label", value)} />
+<Field label="Stat 3 value" value={site.stat3Value} onChange={(value) => update("stat3Value", value)} />
+<Field label="Stat 3 label" value={site.stat3Label} onChange={(value) => update("stat3Label", value)} />
+<Field label="Stat 4 value" value={site.stat4Value} onChange={(value) => update("stat4Value", value)} />
+<Field label="Stat 4 label" value={site.stat4Label} onChange={(value) => update("stat4Label", value)} />
+</div>
+</AdminCard>
+</div>
+)}
+
+{tab === "images" && (
+<div className="grid gap-5">
+<AdminCard title="Background images" subtitle="Upload from phone or laptop. These are saved to Blob and visible worldwide.">
+<div className="grid gap-4 md:grid-cols-2">
+<SingleImageEditor
+title="Whole page background"
+item={site.backgroundImage}
+folder="admin/background"
+onChange={(item) => update("backgroundImage", item)}
 />
-<Field
-label="Phone Number"
-value={site.content.phoneNumber}
-onChange={(next) => updateContent("phoneNumber", next)}
+
+<SingleImageEditor
+title="Hero section background"
+item={site.heroSectionBackgroundImage}
+folder="admin/hero-background"
+onChange={(item) => update("heroSectionBackgroundImage", item)}
 />
-<Field
-label="Zelle Contact"
-value={site.content.zelleContact}
-onChange={(next) => updateContent("zelleContact", next)}
+
+<SingleImageEditor
+title="Right card top image"
+item={site.heroTopImage}
+folder="admin/hero-top"
+onChange={(item) => update("heroTopImage", item)}
 />
-<Field
-label="Hero Badge"
-value={site.content.heroBadge}
-onChange={(next) => updateContent("heroBadge", next)}
-/>
-<Field
-label="Hero Title Line 1"
-value={site.content.heroTitleLine1}
-onChange={(next) => updateContent("heroTitleLine1", next)}
-/>
-<Field
-label="Hero Title Line 2"
-value={site.content.heroTitleLine2}
-onChange={(next) => updateContent("heroTitleLine2", next)}
-/>
-<Field
-label="Hero Subtitle"
-value={site.content.heroSubtitle}
-onChange={(next) => updateContent("heroSubtitle", next)}
-multiline
-/>
-<Field
-label="Start Card Title"
-value={site.content.startCardTitle}
-onChange={(next) => updateContent("startCardTitle", next)}
-/>
-<Field
-label="Start Card Text"
-value={site.content.startCardText}
-onChange={(next) => updateContent("startCardText", next)}
-multiline
+
+<SingleImageEditor
+title="Right card bottom image"
+item={site.heroBottomImage}
+folder="admin/hero-bottom"
+onChange={(item) => update("heroBottomImage", item)}
 />
 </div>
 
 <div className="mt-6 grid gap-4 md:grid-cols-2">
-<label className="grid gap-2">
-<span className="text-xs font-semibold uppercase tracking-[0.25em] text-white/45">
-Hero background upload
-</span>
-<label className="cursor-pointer rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white/75">
-Upload background image
-<input
-type="file"
-accept="image/*"
-className="hidden"
-onChange={(e) =>
-void handleBackgroundUpload(e.target.files?.[0] ?? null)
-}
+<NumberSlider
+label="Background brightness"
+value={site.backgroundBrightness}
+min={0.03}
+max={0.9}
+step={0.01}
+onChange={(value) => update("backgroundBrightness", value)}
 />
-</label>
-</label>
 
-<label className="grid gap-2">
-<span className="text-xs font-semibold uppercase tracking-[0.25em] text-white/45">
-Hero background URL
-</span>
-<input
-value={site.content.heroBackgroundUrl}
-onChange={(e) =>
-updateContent("heroBackgroundUrl", e.target.value)
-}
-className="rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none"
-placeholder="https://..."
-/>
-</label>
-</div>
-
-<div className="mt-4 grid gap-4 md:grid-cols-2">
-<label className="grid gap-2">
-<span className="text-xs font-semibold uppercase tracking-[0.25em] text-white/45">
-Right card top image
-</span>
-<label className="cursor-pointer rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white/75">
-Upload top image
-<input
-type="file"
-accept="image/*"
-className="hidden"
-onChange={(e) =>
-void handleHeroPanelUpload("top", e.target.files?.[0] ?? null)
-}
-/>
-</label>
-</label>
-
-<label className="grid gap-2">
-<span className="text-xs font-semibold uppercase tracking-[0.25em] text-white/45">
-Right card bottom image
-</span>
-<label className="cursor-pointer rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white/75">
-Upload bottom image
-<input
-type="file"
-accept="image/*"
-className="hidden"
-onChange={(e) =>
-void handleHeroPanelUpload("bottom", e.target.files?.[0] ?? null)
-}
-/>
-</label>
-</label>
-</div>
-
-<div className="mt-4 grid gap-4 md:grid-cols-2">
-<Field
-label="Top image URL"
-value={site.content.heroPanelImageTop}
-onChange={(next) => updateContent("heroPanelImageTop", next)}
-/>
-<Field
-label="Bottom image URL"
-value={site.content.heroPanelImageBottom}
-onChange={(next) => updateContent("heroPanelImageBottom", next)}
+<NumberSlider
+label="Hero overlay"
+value={site.heroSectionOverlay}
+min={0.05}
+max={0.95}
+step={0.01}
+onChange={(value) => update("heroSectionOverlay", value)}
 />
 </div>
-
-<div className="mt-6">
-<label className="grid gap-2">
-<span className="text-xs font-semibold uppercase tracking-[0.25em] text-white/45">
-Background brightness: {site.content.heroBackgroundBrightness.toFixed(2)}
-</span>
-<input
-type="range"
-min="0.05"
-max="1"
-step="0.01"
-value={site.content.heroBackgroundBrightness}
-onChange={(e) =>
-updateContent(
-"heroBackgroundBrightness",
-Number(e.target.value),
-)
-}
-/>
-</label>
+</AdminCard>
 </div>
-</Shell>
+)}
 
-<Shell className="p-6">
-<h2 className="text-2xl font-bold">Stats + main section copy</h2>
-
-<div className="mt-6 grid gap-4 md:grid-cols-2">
-<Field
-label="Stat 1 Value"
-value={site.content.stat1Value}
-onChange={(next) => updateContent("stat1Value", next)}
-/>
-<Field
-label="Stat 1 Label"
-value={site.content.stat1Label}
-onChange={(next) => updateContent("stat1Label", next)}
-/>
-<Field
-label="Stat 2 Value"
-value={site.content.stat2Value}
-onChange={(next) => updateContent("stat2Value", next)}
-/>
-<Field
-label="Stat 2 Label"
-value={site.content.stat2Label}
-onChange={(next) => updateContent("stat2Label", next)}
-/>
-<Field
-label="Stat 3 Value"
-value={site.content.stat3Value}
-onChange={(next) => updateContent("stat3Value", next)}
-/>
-<Field
-label="Stat 3 Label"
-value={site.content.stat3Label}
-onChange={(next) => updateContent("stat3Label", next)}
-/>
-<Field
-label="Stat 4 Value"
-value={site.content.stat4Value}
-onChange={(next) => updateContent("stat4Value", next)}
-/>
-<Field
-label="Stat 4 Label"
-value={site.content.stat4Label}
-onChange={(next) => updateContent("stat4Label", next)}
-/>
+{tab === "portfolio" && (
+<div className="grid gap-5">
+<AdminCard title="Portfolio images" subtitle="Upload work images by category. They show on homepage preview and portfolio page worldwide.">
+<div className="mb-5 rounded-2xl border border-white/10 bg-black/25 p-4 text-sm text-white/70">
+Total images: {allImages.length}
 </div>
 
-<div className="mt-6 grid gap-4">
-<Field
-label="Services Title"
-value={site.content.servicesTitle}
-onChange={(next) => updateContent("servicesTitle", next)}
-/>
-<Field
-label="Services Subtitle"
-value={site.content.servicesSubtitle}
-onChange={(next) => updateContent("servicesSubtitle", next)}
-multiline
-/>
-<Field
-label="Portfolio Title"
-value={site.content.portfolioTitle}
-onChange={(next) => updateContent("portfolioTitle", next)}
-/>
-<Field
-label="Portfolio Subtitle"
-value={site.content.portfolioSubtitle}
-onChange={(next) => updateContent("portfolioSubtitle", next)}
-multiline
-/>
-<Field
-label="Reviews Title"
-value={site.content.reviewsTitle}
-onChange={(next) => updateContent("reviewsTitle", next)}
-/>
-<Field
-label="Reviews Subtitle"
-value={site.content.reviewsSubtitle}
-onChange={(next) => updateContent("reviewsSubtitle", next)}
-multiline
-/>
-<Field
-label="About Title"
-value={site.content.aboutTitle}
-onChange={(next) => updateContent("aboutTitle", next)}
-/>
-<Field
-label="About Subtitle"
-value={site.content.aboutSubtitle}
-onChange={(next) => updateContent("aboutSubtitle", next)}
-multiline
-/>
-</div>
-</Shell>
-
-<Shell className="p-6">
-<h2 className="text-2xl font-bold">FAQ + quick actions + CTA</h2>
-
-<div className="mt-6 grid gap-4">
-<Field
-label="FAQ Title"
-value={site.content.faqTitle}
-onChange={(next) => updateContent("faqTitle", next)}
-/>
-<Field
-label="FAQ Subtitle"
-value={site.content.faqSubtitle}
-onChange={(next) => updateContent("faqSubtitle", next)}
-multiline
-/>
-<Field
-label="Quick Actions Title"
-value={site.content.quickTitle}
-onChange={(next) => updateContent("quickTitle", next)}
-/>
-<Field
-label="Quick Actions Subtitle"
-value={site.content.quickSubtitle}
-onChange={(next) => updateContent("quickSubtitle", next)}
-multiline
-/>
-<Field
-label="CTA Badge"
-value={site.content.ctaBadge}
-onChange={(next) => updateContent("ctaBadge", next)}
-/>
-<Field
-label="CTA Title"
-value={site.content.ctaTitle}
-onChange={(next) => updateContent("ctaTitle", next)}
-multiline
-/>
-<Field
-label="CTA Text"
-value={site.content.ctaText}
-onChange={(next) => updateContent("ctaText", next)}
-multiline
-/>
-</div>
-</Shell>
-</>
-) : null}
-
-{tab === "portfolio" ? (
-<Shell className="p-6">
-<div className="flex flex-wrap items-center justify-between gap-3">
+<div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+{CATEGORIES.map((category) => (
+<div key={category} className="rounded-[1.5rem] border border-white/10 bg-white/[0.04] p-4">
+<div className="flex items-center justify-between gap-3">
 <div>
-<h2 className="text-2xl font-bold">Portfolio manager</h2>
-<p className="mt-2 text-sm text-white/60">
-Upload images to a real shared store so everyone can see them.
-</p>
+<h3 className="font-bold">{category}</h3>
+<p className="text-xs text-white/45">{site.portfolio[category].length} image(s)</p>
 </div>
-<label className="cursor-pointer rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white">
-Upload to {selectedCategory}
-<input
-type="file"
-accept="image/*"
-multiple
-className="hidden"
-onChange={(e) =>
-void handlePortfolioUpload(selectedCategory, e.target.files)
-}
+
+<UploadButton
+label="Upload"
+folder={`portfolio/${category}`}
+onUploaded={(items) => {
+setSite((prev) => ({
+...prev,
+portfolio: {
+...prev.portfolio,
+[category]: [...prev.portfolio[category], ...items],
+},
+}));
+}}
 />
-</label>
+</div>
+
+<div className="mt-4 grid gap-3">
+{site.portfolio[category].length === 0 ? (
+<div className="rounded-2xl border border-dashed border-white/15 p-8 text-center text-sm text-white/45">
+No images yet
+</div>
+) : (
+site.portfolio[category].map((image) => (
+<ImageCard
+key={image.id}
+image={image}
+onRemove={() => {
+setSite((prev) => ({
+...prev,
+portfolio: {
+...prev.portfolio,
+[category]: prev.portfolio[category].filter((item) => item.id !== image.id),
+},
+}));
+}}
+/>
+))
+)}
+</div>
+</div>
+))}
+</div>
+</AdminCard>
+</div>
+)}
+
+{tab === "reviews" && (
+<AdminCard title="Reviews" subtitle="View, edit, delete, and add review photos.">
+<button
+type="button"
+onClick={addReview}
+className="mb-5 rounded-full bg-white px-5 py-3 text-sm font-black text-black"
+>
+Add Review
+</button>
+
+<div className="grid gap-4">
+{site.reviews.length === 0 ? (
+<div className="rounded-2xl border border-dashed border-white/15 p-8 text-center text-white/45">
+No reviews yet.
+</div>
+) : (
+site.reviews.map((review, index) => (
+<div key={review.id} className="rounded-[1.5rem] border border-white/10 bg-white/[0.04] p-4">
+<div className="grid gap-4 md:grid-cols-2">
+<Field
+label="Name"
+value={review.name}
+onChange={(value) => {
+setSite((prev) => ({
+...prev,
+reviews: prev.reviews.map((item, i) => (i === index ? { ...item, name: value } : item)),
+}));
+}}
+/>
+
+<Field
+label="Rating"
+value={String(review.rating)}
+onChange={(value) => {
+setSite((prev) => ({
+...prev,
+reviews: prev.reviews.map((item, i) =>
+i === index ? { ...item, rating: Math.max(1, Math.min(5, Number(value) || 5)) } : item
+),
+}));
+}}
+/>
+
+<div className="md:col-span-2">
+<Field
+label="Review text"
+value={review.text}
+textarea
+onChange={(value) => {
+setSite((prev) => ({
+...prev,
+reviews: prev.reviews.map((item, i) => (i === index ? { ...item, text: value } : item)),
+}));
+}}
+/>
+</div>
 </div>
 
 <div className="mt-4 flex flex-wrap gap-2">
-{CATEGORIES.map((category) => (
-<Button
-key={category}
-variant={selectedCategory === category ? "light" : "dark"}
-onClick={() => setSelectedCategory(category)}
+<UploadButton
+label="Add review photos"
+folder="reviews"
+onUploaded={(items) => {
+setSite((prev) => ({
+...prev,
+reviews: prev.reviews.map((item, i) =>
+i === index ? { ...item, photos: [...item.photos, ...items] } : item
+),
+}));
+}}
+/>
+
+<button
+type="button"
+onClick={() => {
+setSite((prev) => ({
+...prev,
+reviews: prev.reviews.filter((_, i) => i !== index),
+}));
+}}
+className="rounded-full border border-white/10 px-4 py-3 text-sm text-white/75"
 >
-{category}
-</Button>
-))}
+Delete Review
+</button>
 </div>
-
-<div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-{site.portfolio[selectedCategory].length === 0 ? (
-<div className="rounded-[1.5rem] border border-dashed border-white/15 p-10 text-center text-sm text-white/50 md:col-span-2 xl:col-span-3">
-No images yet in {selectedCategory}.
-</div>
-) : (
-site.portfolio[selectedCategory].map((img) => (
-<ImageTile
-key={img.id}
-img={img}
-onOpen={() => setPreviewImage(img.url)}
-onDelete={() => removePortfolioImage(selectedCategory, img.id)}
-/>
-))
-)}
-</div>
-</Shell>
-) : null}
-
-{tab === "reviews" ? (
-<Shell className="p-6">
-<h2 className="text-2xl font-bold">Reviews manager</h2>
-<p className="mt-2 text-sm text-white/60">
-Add reviews and upload their photos to Blob.
-</p>
-
-<div className="mt-6 grid gap-4 md:grid-cols-2">
-<Field
-label="Reviewer Name"
-value={reviewDraft.name}
-onChange={(next) =>
-setReviewDraft((prev) => ({ ...prev, name: next }))
-}
-/>
-<label className="grid gap-2">
-<span className="text-xs font-semibold uppercase tracking-[0.25em] text-white/45">
-Rating
-</span>
-<select
-value={reviewDraft.rating}
-onChange={(e) =>
-setReviewDraft((prev) => ({ ...prev, rating: e.target.value }))
-}
-className="rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none"
->
-<option value="5">5 stars</option>
-<option value="4">4 stars</option>
-<option value="3">3 stars</option>
-<option value="2">2 stars</option>
-<option value="1">1 star</option>
-</select>
-</label>
-</div>
-
-<div className="mt-4">
-<Field
-label="Review Text"
-value={reviewDraft.text}
-onChange={(next) =>
-setReviewDraft((prev) => ({ ...prev, text: next }))
-}
-multiline
-/>
-</div>
-
-<div className="mt-4 flex flex-wrap gap-3">
-<label className="cursor-pointer rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white">
-Upload review photos
-<input
-type="file"
-accept="image/*"
-multiple
-className="hidden"
-onChange={(e) => void handleReviewPhotoUpload(e.target.files)}
-/>
-</label>
-
-<Button variant="light" onClick={addReview}>
-Add Review
-</Button>
-</div>
-
-{reviewPhotos.length > 0 ? (
-<div className="mt-5 grid gap-3 md:grid-cols-3">
-{reviewPhotos.map((img) => (
-<ImageTile
-key={img.id}
-img={img}
-onOpen={() => setPreviewImage(img.url)}
-/>
-))}
-</div>
-) : null}
-
-<div className="mt-8 space-y-4">
-{site.reviews.length === 0 ? (
-<div className="rounded-[1.5rem] border border-dashed border-white/15 p-8 text-center text-sm text-white/50">
-No saved reviews yet.
-</div>
-) : (
-site.reviews.map((review) => (
-<div
-key={review.id}
-className="rounded-[1.5rem] border border-white/10 bg-black/30 p-5"
->
-<div className="flex flex-wrap items-center justify-between gap-3">
-<div>
-<p className="text-lg font-semibold">{review.name}</p>
-<p className="text-xs text-white/45">{review.date}</p>
-</div>
-<p className="text-blue-400">{stars(review.rating)}</p>
-</div>
-<p className="mt-3 text-sm leading-7 text-white/70">{review.text}</p>
 
 {review.photos.length > 0 ? (
-<div className="mt-4 grid gap-3 md:grid-cols-4">
+<div className="mt-4 grid gap-3 sm:grid-cols-2 md:grid-cols-3">
 {review.photos.map((photo) => (
-<ImageTile
+<ImageCard
 key={photo.id}
-img={photo}
-onOpen={() => setPreviewImage(photo.url)}
+image={photo}
+onRemove={() => {
+setSite((prev) => ({
+...prev,
+reviews: prev.reviews.map((item, i) =>
+i === index ? { ...item, photos: item.photos.filter((p) => p.id !== photo.id) } : item
+),
+}));
+}}
 />
 ))}
 </div>
 ) : null}
-
-<div className="mt-4">
-<Button variant="danger" onClick={() => deleteReview(review.id)}>
-Delete Review
-</Button>
-</div>
 </div>
 ))
 )}
 </div>
-</Shell>
-) : null}
-
-{tab === "visits" ? (
-<Shell className="p-6">
-<div className="flex items-center justify-between gap-3">
-<h2 className="text-2xl font-bold">Visit requests</h2>
-<p className="text-sm text-white/60">{site.visits.length} saved</p>
-</div>
-
-<div className="mt-6 space-y-4">
-{site.visits.length === 0 ? (
-<div className="rounded-[1.5rem] border border-dashed border-white/15 p-8 text-center text-sm text-white/50">
-No visit requests yet.
-</div>
-) : (
-site.visits.map((item) => (
-<div
-key={item.id}
-className="rounded-[1.5rem] border border-white/10 bg-black/30 p-5"
->
-<div className="flex flex-wrap items-start justify-between gap-3">
-<div>
-<p className="text-lg font-semibold">{item.name}</p>
-<p className="text-sm text-white/60">{item.email}</p>
-<p className="text-sm text-white/60">{item.phone}</p>
-</div>
-<p className="text-xs text-white/45">{item.date}</p>
-</div>
-
-<div className="mt-4 grid gap-3 md:grid-cols-2">
-<p className="text-sm text-white/75">
-<span className="text-white/45">Address:</span> {item.address || "—"}
-</p>
-<p className="text-sm text-white/75">
-<span className="text-white/45">Job type:</span> {item.jobType || "—"}
-</p>
-<p className="text-sm text-white/75">
-<span className="text-white/45">Preferred time:</span>{" "}
-{item.preferredTime || "—"}
-</p>
-<p className="text-sm text-white/75 md:col-span-2">
-<span className="text-white/45">Details:</span> {item.details || "—"}
-</p>
-</div>
-
-<div className="mt-4">
-<Button variant="danger" onClick={() => deleteVisit(item.id)}>
-Delete Visit
-</Button>
-</div>
-</div>
-))
+</AdminCard>
 )}
-</div>
-</Shell>
-) : null}
 
-{tab === "payments" ? (
-<Shell className="p-6">
-<div className="flex items-center justify-between gap-3">
-<h2 className="text-2xl font-bold">Payment submissions</h2>
-<p className="text-sm text-white/60">{site.payments.length} saved</p>
-</div>
-
-<div className="mt-6 space-y-4">
-{site.payments.length === 0 ? (
-<div className="rounded-[1.5rem] border border-dashed border-white/15 p-8 text-center text-sm text-white/50">
-No payment submissions yet.
-</div>
-) : (
-site.payments.map((item) => (
-<div
-key={item.id}
-className="rounded-[1.5rem] border border-white/10 bg-black/30 p-5"
+{tab === "visits" && (
+<AdminCard title="Visit requests" subtitle="View and edit requests submitted from the site.">
+<button
+type="button"
+onClick={addVisit}
+className="mb-5 rounded-full bg-white px-5 py-3 text-sm font-black text-black"
 >
-<div className="flex flex-wrap items-start justify-between gap-3">
-<div>
-<p className="text-lg font-semibold">${item.amount}</p>
-<p className="text-sm text-white/60">{item.name}</p>
-<p className="text-sm text-white/60">{item.email}</p>
-</div>
-<p className="text-xs text-white/45">{item.date}</p>
-</div>
-
-<p className="mt-4 text-sm text-white/75">
-<span className="text-white/45">Notes:</span> {item.notes || "—"}
-</p>
-
-{item.proofs.length > 0 ? (
-<div className="mt-4 grid gap-3 md:grid-cols-4">
-{item.proofs.map((proof) => (
-<ImageTile
-key={proof.id}
-img={proof}
-onOpen={() => setPreviewImage(proof.url)}
-/>
-))}
-</div>
-) : null}
-
-<div className="mt-4">
-<Button variant="danger" onClick={() => deletePayment(item.id)}>
-Delete Payment
-</Button>
-</div>
-</div>
-))
-)}
-</div>
-</Shell>
-) : null}
-</div>
-
-<div className="space-y-6">
-<Shell className="p-4">
-<div className="flex flex-wrap items-center justify-between gap-3">
-<div>
-<p className="text-xs uppercase tracking-[0.35em] text-white/45">
-Live preview
-</p>
-<p className="mt-1 text-sm text-white/60">
-This preview mirrors the site data you’re editing.
-</p>
-</div>
-
-<div className="flex gap-2">
-<Button
-variant={previewMode === "desktop" ? "light" : "dark"}
-onClick={() => setPreviewMode("desktop")}
->
-Desktop
-</Button>
-<Button
-variant={previewMode === "mobile" ? "light" : "dark"}
-onClick={() => setPreviewMode("mobile")}
->
-Mobile
-</Button>
-</div>
-</div>
-</Shell>
-
-<div className={previewWidthClass}>
-<div className="overflow-hidden rounded-[2rem] border border-white/10 bg-black shadow-2xl">
-<div className="border-b border-white/10 bg-black/90 px-4 py-4">
-<div className="flex flex-wrap items-center justify-between gap-3">
-<p className="text-xs font-bold uppercase tracking-[0.25em] text-white/90">
-{site.content.businessName}
-</p>
-<div className="flex flex-wrap gap-2 text-xs">
-<span className="rounded-full border border-white/10 px-3 py-1 text-white/70">
-View Portfolio
-</span>
-<span className="rounded-full border border-white/10 px-3 py-1 text-white/70">
-Reviews
-</span>
-<span className="rounded-full border border-white/10 px-3 py-1 text-white/70">
-Request Visit
-</span>
-<span className="rounded-full border border-white/10 px-3 py-1 text-white/70">
-Make Payment
-</span>
-<span className="rounded-full bg-white px-3 py-1 text-black">
-Call Now
-</span>
-</div>
-</div>
-</div>
-
-<div className="relative">
-<div
-className="absolute inset-0"
-style={heroBackgroundStyle}
-/>
-<div
-className="absolute inset-0 bg-black"
-style={{ opacity: site.content.heroBackgroundBrightness }}
-/>
-<div className="relative px-4 py-5 md:px-6 md:py-6">
-<section className="grid gap-4 lg:grid-cols-[1.1fr_.9fr]">
-<Shell className="p-6">
-<p className="text-xs uppercase tracking-[0.35em] text-white/45">
-{site.content.heroBadge}
-</p>
-<h1 className="mt-4 text-4xl font-black leading-[0.95] md:text-6xl">
-{site.content.heroTitleLine1}
-<span className="block text-blue-500">
-{site.content.heroTitleLine2}
-</span>
-</h1>
-<p className="mt-4 max-w-2xl text-sm leading-7 text-white/70">
-{site.content.heroSubtitle}
-</p>
-
-<div className="mt-6 flex flex-wrap gap-3">
-<span className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-black">
-Request Visit
-</span>
-<span className="rounded-full border border-white/10 px-5 py-3 text-sm font-semibold text-white">
-View Portfolio
-</span>
-<span className="rounded-full border border-white/10 px-5 py-3 text-sm font-semibold text-white">
-Make Payment
-</span>
-</div>
-
-<div className="mt-6 flex flex-wrap gap-4 text-xs text-white/60">
-<span>{site.content.stat3Value} {site.content.stat3Label}</span>
-<span>Quality craftsmanship</span>
-<span>Transparent pricing</span>
-</div>
-</Shell>
+Add Visit
+</button>
 
 <div className="grid gap-4">
-<Shell className="p-5">
-<div className="grid gap-4 md:grid-cols-[1fr_180px]">
-<div>
-<p className="text-xs uppercase tracking-[0.35em] text-white/45">
-Start here
-</p>
-<h2 className="mt-3 text-3xl font-black leading-tight">
-{site.content.startCardTitle}
-</h2>
-<p className="mt-3 text-sm leading-7 text-white/70">
-{site.content.startCardText}
-</p>
-
-<div className="mt-5 flex flex-wrap gap-3">
-<span className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-black">
-View Portfolio
-</span>
-<span className="rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-white">
-Request Visit
-</span>
+{site.visits.length === 0 ? (
+<div className="rounded-2xl border border-dashed border-white/15 p-8 text-center text-white/45">
+No visits yet.
 </div>
-</div>
-
-<div className="grid gap-3">
-{site.content.heroPanelImageTop ? (
-<img
-src={site.content.heroPanelImageTop}
-alt="hero preview top"
-className="h-32 w-full rounded-[1.3rem] object-cover"
-/>
 ) : (
-<div className="h-32 rounded-[1.3rem] border border-dashed border-white/15 bg-black/30" />
-)}
-
-{site.content.heroPanelImageBottom ? (
-<img
-src={site.content.heroPanelImageBottom}
-alt="hero preview bottom"
-className="h-32 w-full rounded-[1.3rem] object-cover"
+site.visits.map((visit, index) => (
+<div key={visit.id} className="rounded-[1.5rem] border border-white/10 bg-white/[0.04] p-4">
+<div className="grid gap-4 md:grid-cols-2">
+{(["name", "email", "phone", "address", "jobType", "preferredTime"] as const).map((key) => (
+<Field
+key={key}
+label={key}
+value={visit[key]}
+onChange={(value) => {
+setSite((prev) => ({
+...prev,
+visits: prev.visits.map((item, i) => (i === index ? { ...item, [key]: value } : item)),
+}));
+}}
 />
-) : (
-<div className="h-32 rounded-[1.3rem] border border-dashed border-white/15 bg-black/30" />
-)}
-</div>
-</div>
-</Shell>
-
-<div className="grid grid-cols-2 gap-4">
-<Shell className="p-5">
-<p className="text-3xl font-black text-blue-500">
-{site.content.stat1Value}
-</p>
-<p className="mt-1 text-sm text-white/60">
-{site.content.stat1Label}
-</p>
-</Shell>
-<Shell className="p-5">
-<p className="text-3xl font-black text-blue-500">
-{site.content.stat2Value}
-</p>
-<p className="mt-1 text-sm text-white/60">
-{site.content.stat2Label}
-</p>
-</Shell>
-</div>
-
-<Shell className="p-5">
-<div className="grid gap-3 sm:grid-cols-2">
-<div className="rounded-[1.4rem] border border-white/10 bg-white/5 p-5">
-<p className="text-xs uppercase tracking-[0.3em] text-white/45">
-Portfolio Preview
-</p>
-<p className="mt-3 text-2xl font-bold">Selected work only.</p>
-<p className="mt-3 text-sm text-white/65">
-The gallery lives on its own page so the homepage stays clean.
-</p>
-</div>
-
-<div className="rounded-[1.4rem] border border-white/10 bg-white/5 p-5">
-<p className="text-xs uppercase tracking-[0.3em] text-white/45">
-Action Flow
-</p>
-<p className="mt-3 text-sm text-white/70">
-Visit, portfolio, and payment buttons are kept obvious.
-</p>
-<p className="mt-2 text-sm text-white/70">
-Reviews with photos can show on the homepage.
-</p>
-</div>
-</div>
-</Shell>
-</div>
-</section>
-
-<section className="mt-8 rounded-[2rem] bg-gradient-to-r from-lime-400 to-emerald-400 px-6 py-10 text-black">
-<p className="text-xs uppercase tracking-[0.35em] text-black/60">
-{site.content.ctaBadge}
-</p>
-<div className="mt-3 grid gap-5 lg:grid-cols-[1fr_auto] lg:items-center">
-<div>
-<h2 className="text-4xl font-black leading-tight md:text-6xl">
-{site.content.ctaTitle}
-</h2>
-<p className="mt-3 max-w-2xl text-sm leading-7 text-black/75">
-{site.content.ctaText}
-</p>
-</div>
-<div className="grid gap-3">
-<span className="rounded-full bg-black px-5 py-3 text-center text-sm font-semibold text-white">
-Request Visit
-</span>
-<span className="rounded-full border border-black/15 px-5 py-3 text-center text-sm font-semibold text-black">
-View Portfolio
-</span>
-<span className="rounded-full border border-black/15 px-5 py-3 text-center text-sm font-semibold text-black">
-Make Payment
-</span>
-</div>
-</div>
-</section>
-
-<section className="mt-10">
-<SectionHeading
-eyebrow="Services"
-title={site.content.servicesTitle}
-text={site.content.servicesSubtitle}
-/>
-<div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-{SERVICES.map((service) => (
-<Shell key={service.title} className="p-5">
-<div className="flex items-start justify-between gap-3">
-<h3 className="text-lg font-bold">{service.title}</h3>
-<span className="rounded-full border border-white/10 px-3 py-1 text-[11px] text-white/60">
-Premium
-</span>
-</div>
-<p className="mt-3 text-sm leading-7 text-white/68">
-{service.description}
-</p>
-</Shell>
 ))}
-</div>
-</section>
 
-<section className="mt-10">
-<SectionHeading
-eyebrow="Portfolio Preview"
-title={site.content.portfolioTitle}
-text={site.content.portfolioSubtitle}
+<div className="md:col-span-2">
+<Field
+label="Details"
+value={visit.details}
+textarea
+onChange={(value) => {
+setSite((prev) => ({
+...prev,
+visits: prev.visits.map((item, i) => (i === index ? { ...item, details: value } : item)),
+}));
+}}
 />
-<div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-{portfolioPreviewCards.map((card) => (
-<Shell key={card.title} className="overflow-hidden">
-{card.image ? (
-<img
-src={card.image}
-alt={card.title}
-className="h-56 w-full object-cover"
-/>
-) : (
-<div className="h-56 bg-[linear-gradient(135deg,rgba(255,255,255,0.14),rgba(255,255,255,0.03)),radial-gradient(circle_at_top_right,rgba(34,197,94,0.28),transparent_35%),radial-gradient(circle_at_bottom_left,rgba(59,130,246,0.22),transparent_35%)]" />
-)}
-<div className="p-5">
-<p className="text-xs uppercase tracking-[0.3em] text-white/45">
-Portfolio Preview
-</p>
-<h3 className="mt-3 text-2xl font-bold">{card.title}</h3>
-<p className="mt-3 text-sm leading-7 text-white/65">{card.text}</p>
-<div className="mt-5 flex gap-3">
-<span className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-black">
-View Portfolio
-</span>
-<span className="rounded-full border border-white/15 px-4 py-2 text-sm font-semibold text-white">
-Request Visit
-</span>
 </div>
-</div>
-</Shell>
-))}
-</div>
-</section>
-
-<section className="mt-10">
-<div className="flex flex-wrap items-end justify-between gap-4">
-<SectionHeading
-eyebrow="Reviews"
-title={site.content.reviewsTitle}
-text={site.content.reviewsSubtitle}
-/>
-<div className="text-sm text-white/60">Average rating: 5.0/5</div>
 </div>
 
-<div className="mt-6 grid gap-4 md:grid-cols-3">
-{site.reviews.length === 0 ? (
-<Shell className="p-6 md:col-span-3">No reviews yet.</Shell>
-) : (
-site.reviews.slice(0, 3).map((review) => (
-<Shell key={review.id} className="p-5">
-<div className="flex items-center justify-between gap-3">
-<p className="font-semibold">{review.name}</p>
-<span className="text-blue-400">{stars(review.rating)}</span>
-</div>
-<p className="mt-4 text-sm leading-7 text-white/75">
-“{review.text}”
-</p>
-
-{review.photos.length > 0 ? (
-<div className="mt-4 grid grid-cols-2 gap-3">
-{review.photos.slice(0, 4).map((photo) => (
-<button
-key={photo.id}
-type="button"
-onClick={() => setPreviewImage(photo.url)}
-className="overflow-hidden rounded-2xl border border-white/10"
->
-<img
-src={photo.url}
-alt={photo.alt}
-className="h-24 w-full object-cover"
-/>
+<div className="mt-4 flex flex-wrap gap-2">
+<a href={phoneHref(visit.phone)}>
+<button type="button" className="rounded-full border border-white/10 px-4 py-3 text-sm">
+Call
 </button>
-))}
+</a>
+
+<button
+type="button"
+onClick={() => {
+setSite((prev) => ({
+...prev,
+visits: prev.visits.filter((_, i) => i !== index),
+}));
+}}
+className="rounded-full border border-white/10 px-4 py-3 text-sm text-white/75"
+>
+Delete Visit
+</button>
 </div>
-) : null}
-</Shell>
+</div>
 ))
 )}
 </div>
-</section>
+</AdminCard>
+)}
 
-<section className="mt-10 grid gap-4 lg:grid-cols-[1.05fr_.95fr]">
-<Shell className="p-6">
-<SectionHeading
-eyebrow="About"
-title={site.content.aboutTitle}
-text={site.content.aboutSubtitle}
-/>
-<div className="mt-6 flex flex-wrap gap-3">
-<span className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-black">
-Request Visit
-</span>
-<span className="rounded-full border border-white/15 px-5 py-3 text-sm font-semibold text-white">
-View Portfolio
-</span>
-</div>
-
-<div className="mt-6 grid gap-2 text-sm text-white/70">
-<p>• Remodeling and renovation</p>
-<p>• Repairs and finishing work</p>
-<p>• Custom interior and exterior projects</p>
-<p>• Visit-based estimates and clear communication</p>
-</div>
-</Shell>
-
-<Shell className="p-6">
-<p className="text-xs uppercase tracking-[0.35em] text-white/45">
-Top Features
-</p>
-<div className="mt-4 grid gap-3">
-<div className="rounded-[1.3rem] border border-white/10 bg-white/5 p-4">
-<p className="font-semibold">Request Visit</p>
-<p className="mt-2 text-sm text-white/65">
-Opens only when clicked and gives a proper response after
-submission.
-</p>
-</div>
-<div className="rounded-[1.3rem] border border-white/10 bg-white/5 p-4">
-<p className="font-semibold">Make Payment</p>
-<p className="mt-2 text-sm text-white/65">
-Opens the Zelle instructions only when pressed.
-</p>
-</div>
-<div className="rounded-[1.3rem] border border-white/10 bg-white/5 p-4">
-<p className="font-semibold">View Portfolio</p>
-<p className="mt-2 text-sm text-white/65">
-Sends the user to the dedicated gallery page.
-</p>
-</div>
-</div>
-</Shell>
-</section>
-
-<section className="mt-10">
-<SectionHeading
-eyebrow="FAQ"
-title={site.content.faqTitle}
-text={site.content.faqSubtitle}
-/>
-<div className="mt-6 grid gap-4 md:grid-cols-2">
-{FAQ_ITEMS.map((item) => (
-<Shell key={item.q} className="p-5">
-<h3 className="text-lg font-bold">{item.q}</h3>
-<p className="mt-3 text-sm leading-7 text-white/68">{item.a}</p>
-</Shell>
-))}
-</div>
-</section>
-
-<section className="mt-10">
-<div className="mx-auto max-w-4xl text-center">
-<p className="text-xs uppercase tracking-[0.35em] text-white/45">
-Contact
-</p>
-<h2 className="mt-3 text-4xl font-black md:text-6xl">
-{site.content.quickTitle}
-</h2>
-<p className="mt-3 text-sm leading-7 text-white/65">
-{site.content.quickSubtitle}
-</p>
-</div>
-
-<div className="mx-auto mt-6 grid max-w-4xl gap-4 md:grid-cols-3">
-<span className="rounded-[1.6rem] border border-white/10 bg-white px-6 py-7 text-left font-semibold text-black">
-Request Visit
-</span>
-<span className="rounded-[1.6rem] border border-white/10 bg-white/5 px-6 py-7 text-left font-semibold text-white">
-View Portfolio
-</span>
-<span className="rounded-[1.6rem] border border-white/10 bg-white/5 px-6 py-7 text-left font-semibold text-white">
-Make Payment
-</span>
-</div>
-</section>
-</div>
-</div>
-</div>
-</div>
-</div>
-</main>
-
-{previewImage ? (
+{tab === "payments" && (
+<AdminCard title="Payments" subtitle="View customer payment proof uploads.">
 <button
 type="button"
-onClick={() => setPreviewImage(null)}
-className="fixed inset-0 z-[90] flex items-center justify-center bg-black/90 p-5"
+onClick={addPayment}
+className="mb-5 rounded-full bg-white px-5 py-3 text-sm font-black text-black"
 >
-<img
-src={previewImage}
-alt="preview"
-className="max-h-[90vh] max-w-[95vw] rounded-3xl shadow-2xl"
-/>
+Add Payment
 </button>
+
+<div className="grid gap-4">
+{site.payments.length === 0 ? (
+<div className="rounded-2xl border border-dashed border-white/15 p-8 text-center text-white/45">
+No payments yet.
+</div>
+) : (
+site.payments.map((payment, index) => (
+<div key={payment.id} className="rounded-[1.5rem] border border-white/10 bg-white/[0.04] p-4">
+<div className="grid gap-4 md:grid-cols-2">
+<Field
+label="Amount"
+value={payment.amount}
+onChange={(value) => {
+setSite((prev) => ({
+...prev,
+payments: prev.payments.map((item, i) => (i === index ? { ...item, amount: value } : item)),
+}));
+}}
+/>
+
+<Field
+label="Name"
+value={payment.name}
+onChange={(value) => {
+setSite((prev) => ({
+...prev,
+payments: prev.payments.map((item, i) => (i === index ? { ...item, name: value } : item)),
+}));
+}}
+/>
+
+<Field
+label="Email"
+value={payment.email}
+onChange={(value) => {
+setSite((prev) => ({
+...prev,
+payments: prev.payments.map((item, i) => (i === index ? { ...item, email: value } : item)),
+}));
+}}
+/>
+
+<div className="md:col-span-2">
+<Field
+label="Notes"
+value={payment.notes}
+textarea
+onChange={(value) => {
+setSite((prev) => ({
+...prev,
+payments: prev.payments.map((item, i) => (i === index ? { ...item, notes: value } : item)),
+}));
+}}
+/>
+</div>
+</div>
+
+<div className="mt-4 flex flex-wrap gap-2">
+<UploadButton
+label="Add payment proof"
+folder="payments"
+onUploaded={(items) => {
+setSite((prev) => ({
+...prev,
+payments: prev.payments.map((item, i) =>
+i === index ? { ...item, proofs: [...item.proofs, ...items] } : item
+),
+}));
+}}
+/>
+
+<button
+type="button"
+onClick={() => {
+setSite((prev) => ({
+...prev,
+payments: prev.payments.filter((_, i) => i !== index),
+}));
+}}
+className="rounded-full border border-white/10 px-4 py-3 text-sm text-white/75"
+>
+Delete Payment
+</button>
+</div>
+
+{payment.proofs.length > 0 ? (
+<div className="mt-4 grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+{payment.proofs.map((proof) => (
+<ImageCard
+key={proof.id}
+image={proof}
+onRemove={() => {
+setSite((prev) => ({
+...prev,
+payments: prev.payments.map((item, i) =>
+i === index ? { ...item, proofs: item.proofs.filter((p) => p.id !== proof.id) } : item
+),
+}));
+}}
+/>
+))}
+</div>
 ) : null}
 </div>
-);
-}
+))
+)}
+</div>
+</AdminCard>
+)}
 
-function slugify(input: string) {
-return input
-.toLowerCase()
-.replace(/&/g, "and")
-.replace(/[^a-z0-9]+/g, "-")
-.replace(/^-+|-+$/g, "");
+{tab === "preview" && (
+<AdminCard title="Live preview" subtitle="This shows what the homepage data looks like before/after saving.">
+<div className="grid gap-5 lg:grid-cols-[1fr_.85fr]">
+<div className="rounded-[2rem] border border-white/10 bg-black/35 p-6">
+<p className="text-xs uppercase tracking-[0.35em] text-white/45">{site.heroBadge}</p>
+<h2 className="mt-4 text-5xl font-black leading-[0.95]">
+{site.heroTitleLine1}
+<span className="block text-blue-400">{site.heroTitleLine2}</span>
+</h2>
+<p className="mt-4 text-sm leading-7 text-white/65">{site.heroSubtitle}</p>
+
+<div className="mt-6 flex flex-wrap gap-3">
+<button className="rounded-full bg-white px-5 py-3 font-bold text-black">Request Visit</button>
+<button className="rounded-full border border-white/10 px-5 py-3 font-bold">Portfolio</button>
+</div>
+</div>
+
+<div className="grid gap-3">
+<MediaPreview item={site.heroTopImage || site.heroSectionBackgroundImage || site.backgroundImage} />
+<MediaPreview item={site.heroBottomImage || site.backgroundImage} />
+<div className="grid grid-cols-2 gap-3">
+<div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+<p className="text-2xl font-black text-blue-400">{site.stat1Value}</p>
+<p className="text-sm text-white/60">{site.stat1Label}</p>
+</div>
+<div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+<p className="text-2xl font-black text-blue-400">{site.stat2Value}</p>
+<p className="text-sm text-white/60">{site.stat2Label}</p>
+</div>
+</div>
+</div>
+</div>
+
+<div className="mt-5 rounded-2xl border border-white/10 bg-black/40 p-4 text-sm text-white/65">
+Images: {allImages.length} • Reviews: {site.reviews.length} • Visits: {site.visits.length} • Payments:{" "}
+{site.payments.length}
+</div>
+</AdminCard>
+)}
+</div>
+</main>
+);
 }

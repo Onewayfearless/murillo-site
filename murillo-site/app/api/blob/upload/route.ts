@@ -1,34 +1,92 @@
 import { put } from "@vercel/blob";
 import { NextResponse } from "next/server";
 
+export const runtime = "nodejs";
+
+function cleanFolderName(value: FormDataEntryValue | null) {
+const raw = typeof value === "string" && value.trim() ? value.trim() : "uploads";
+
+return raw
+.replace(/\\/g, "/")
+.split("/")
+.map((part) =>
+part
+.toLowerCase()
+.replace(/[^a-z0-9-_]/g, "-")
+.replace(/-+/g, "-")
+.replace(/^-|-$/g, "")
+)
+.filter(Boolean)
+.join("/") || "uploads";
+}
+
+function cleanFileName(name: string) {
+const fallback = "image";
+const safe = name
+.toLowerCase()
+.replace(/\s+/g, "-")
+.replace(/[^a-z0-9._-]/g, "-")
+.replace(/-+/g, "-")
+.replace(/^-|-$/g, "");
+
+return safe || fallback;
+}
+
 export async function POST(request: Request) {
-  try {
-    const form = await request.formData();
-    const file = form.get("file") as File | null;
-    const folder = String(form.get("folder") || "uploads");
+try {
+const formData = await request.formData();
 
-    if (!file) {
-      return NextResponse.json({ error: "No file uploaded." }, { status: 400 });
-    }
+const file = formData.get("file");
 
-    const safeName = file.name.replace(/\s+/g, "-").toLowerCase();
-    const pathname = `${folder}/${Date.now()}-${safeName}`;
+if (!(file instanceof File)) {
+return NextResponse.json(
+{
+success: false,
+error: "No image file uploaded.",
+},
+{ status: 400 }
+);
+}
 
-    const blob = await put(pathname, file, {
-      access: "public",
-      addRandomSuffix: true,
-    });
+if (!file.type.startsWith("image/")) {
+return NextResponse.json(
+{
+success: false,
+error: "Only image uploads are allowed.",
+},
+{ status: 400 }
+);
+}
 
-    return NextResponse.json({
-      url: blob.url,
-      pathname: blob.pathname,
-      contentType: blob.contentType,
-    });
-  } catch (error) {
-    console.error("Blob upload failed:", error);
-    return NextResponse.json(
-      { error: "Upload failed." },
-      { status: 500 }
-    );
-  }
+const folder = cleanFolderName(formData.get("folder"));
+const fileName = cleanFileName(file.name);
+const uniqueName = `${folder}/${Date.now()}-${Math.random()
+.toString(36)
+.slice(2, 10)}-${fileName}`;
+
+const blob = await put(uniqueName, file, {
+access: "public",
+addRandomSuffix: false,
+contentType: file.type || "image/jpeg",
+});
+
+return NextResponse.json({
+success: true,
+url: blob.url,
+src: blob.url,
+pathname: blob.pathname,
+contentType: blob.contentType,
+uploadedAt: new Date().toISOString(),
+});
+} catch (error) {
+console.error("POST /api/blob/upload failed:", error);
+
+return NextResponse.json(
+{
+success: false,
+error: "Blob upload failed.",
+},
+{ status: 500 }
+);
+}
 }

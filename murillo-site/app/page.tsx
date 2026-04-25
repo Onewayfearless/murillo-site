@@ -60,14 +60,18 @@ zelleContact: string;
 heroBadge: string;
 heroTitleLine1: string;
 heroTitleLine2: string;
-heroAccent: string;
 heroSubtitle: string;
 
 backgroundImage: MediaItem | null;
-backgroundBrightness: number;
-
 heroSectionBackgroundImage: MediaItem | null;
+heroTopImage: MediaItem | null;
+heroBottomImage: MediaItem | null;
+
+backgroundBrightness: number;
 heroSectionOverlay: number;
+
+startCardTitle: string;
+startCardText: string;
 
 servicesTitle: string;
 servicesSubtitle: string;
@@ -87,17 +91,32 @@ faqSubtitle: string;
 quickTitle: string;
 quickSubtitle: string;
 
-contactTitle: string;
-contactSubtitle: string;
+ctaTitle: string;
+ctaText: string;
 
-stat1: string;
-stat2: string;
-stat3: string;
+stat1Value: string;
+stat1Label: string;
+stat2Value: string;
+stat2Label: string;
+stat3Value: string;
+stat3Label: string;
+stat4Value: string;
+stat4Label: string;
 
 portfolio: Record<Category, MediaItem[]>;
 reviews: ReviewItem[];
 visits: VisitItem[];
 payments: PaymentItem[];
+};
+
+type SitePayload = {
+content?: Record<string, unknown>;
+portfolio?: Partial<Record<Category, unknown>>;
+reviews?: unknown[];
+visits?: unknown[];
+payments?: unknown[];
+updatedAt?: string;
+[key: string]: unknown;
 };
 
 const CATEGORIES: Category[] = [
@@ -109,33 +128,38 @@ const CATEGORIES: Category[] = [
 "Renovation",
 ];
 
-const DEFAULT_PHONE = "404-389-3672";
+const DEFAULT_PHONE = "+14043893672";
 
-const DEFAULT_SITE_DATA: SiteData = {
+const DEFAULT_SITE: SiteData = {
 businessName: "Murillo Renovations LLC",
 phoneNumber: DEFAULT_PHONE,
 zelleContact: "your-zelle@email.com",
 
 heroBadge: "Licensed & Insured General Contractor",
-heroTitleLine1: "Home Remolding",
-heroTitleLine2: "Murillo Renovation LLC.",
-heroAccent: "Murillo Renovation LLC.",
+heroTitleLine1: "Luxury Homes",
+heroTitleLine2: "Done Once.",
 heroSubtitle:
 "Premium remodeling, renovation, and custom construction with a clean process, strong communication, and results that feel expensive.",
 
 backgroundImage: null,
-backgroundBrightness: 0.45,
-
 heroSectionBackgroundImage: null,
+heroTopImage: null,
+heroBottomImage: null,
+
+backgroundBrightness: 0.45,
 heroSectionOverlay: 0.58,
 
-servicesTitle: "Our Services",
+startCardTitle: "Quote, visit, or pay in one place.",
+startCardText:
+"Customers can send a message, upload pictures, book a site visit, leave a review, or submit payment proof.",
+
+servicesTitle: "Everything the site should sell",
 servicesSubtitle:
-"What we do.",
+"Keep the homepage premium with strong service blocks, direct action buttons, and clear customer paths.",
 
 portfolioTitle: "Selected work",
 portfolioSubtitle:
-"This page is the gallery preview. The full portfolio lives on its own page, and each category can hold as many images as you want.",
+"The full portfolio lives on its own page and each category can hold as many images as you want.",
 
 reviewsTitle: "What clients say",
 reviewsSubtitle: "Show real reviews on the page and let customers upload photos with them.",
@@ -150,12 +174,17 @@ faqSubtitle: "Keep answers short, useful, and easy to scan.",
 quickTitle: "Quick actions",
 quickSubtitle: "The homepage should always keep a customer one click away from the next step.",
 
-contactTitle: "Contact",
-contactSubtitle: "Keep the call, visit, payment, and portfolio paths obvious.",
+ctaTitle: "Book a visit, get a quote, or make a payment.",
+ctaText: "Use the buttons above to keep the customer flow fast and clean.",
 
-stat1: "100+",
-stat2: "5★",
-stat3: "Fast response",
+stat1Value: "100+",
+stat1Label: "projects",
+stat2Value: "5★",
+stat2Label: "service",
+stat3Value: "Fast",
+stat3Label: "response",
+stat4Value: "Clean",
+stat4Label: "process",
 
 portfolio: {
 "Kitchen Remodel": [],
@@ -207,11 +236,11 @@ description:
 const FAQ = [
 {
 q: "How does the request visit button work?",
-a: "It opens the form only when clicked. Submitting saves the request and sends the request to the owner if notifications are configured.",
+a: "It opens the form only when clicked. Submitting saves the request and can notify the owner when SMS is configured.",
 },
 {
 q: "How does the payment button work?",
-a: "It opens a Zelle payment panel only when clicked, with screenshot upload and payment review submission.",
+a: "It opens a Zelle payment panel with screenshot upload and payment review submission.",
 },
 {
 q: "Can customers add review photos?",
@@ -227,6 +256,27 @@ function uid() {
 return `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function getRecord(value: unknown): Record<string, unknown> {
+return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function getString(obj: Record<string, unknown>, keys: string[], fallback: string) {
+for (const key of keys) {
+const value = obj[key];
+if (typeof value === "string" && value.trim()) return value.trim();
+}
+return fallback;
+}
+
+function getNumber(obj: Record<string, unknown>, keys: string[], fallback: number) {
+for (const key of keys) {
+const value = obj[key];
+if (typeof value === "number" && Number.isFinite(value)) return value;
+if (typeof value === "string" && value.trim() && !Number.isNaN(Number(value))) return Number(value);
+}
+return fallback;
+}
+
 function mediaUrl(item?: MediaItem | null) {
 if (!item) return "";
 return item.url || item.src || "";
@@ -235,11 +285,11 @@ return item.url || item.src || "";
 function toMediaItem(value: unknown): MediaItem | null {
 if (!value) return null;
 
-if (typeof value === "string") {
+if (typeof value === "string" && value.trim()) {
 return {
 id: uid(),
-url: value,
-src: value,
+url: value.trim(),
+src: value.trim(),
 alt: "image",
 name: "image",
 createdAt: new Date().toISOString(),
@@ -249,12 +299,13 @@ createdAt: new Date().toISOString(),
 if (typeof value !== "object") return null;
 
 const raw = value as Record<string, unknown>;
-
 const url =
 typeof raw.url === "string"
 ? raw.url
 : typeof raw.src === "string"
 ? raw.src
+: typeof raw.href === "string"
+? raw.href
 : "";
 
 if (!url && typeof raw.id !== "string") return null;
@@ -281,14 +332,21 @@ typeof raw.createdAt === "string" ? raw.createdAt : new Date().toISOString(),
 };
 }
 
+function firstMedia(obj: Record<string, unknown>, keys: string[]) {
+for (const key of keys) {
+const media = toMediaItem(obj[key]);
+if (media && mediaUrl(media)) return media;
+}
+return null;
+}
+
 function normalizeMediaArray(value: unknown): MediaItem[] {
 if (!Array.isArray(value)) return [];
-return value.map(toMediaItem).filter((item): item is MediaItem => Boolean(item));
+return value.map(toMediaItem).filter((item): item is MediaItem => Boolean(item && mediaUrl(item)));
 }
 
 function normalizeReview(value: unknown): ReviewItem | null {
 if (!value || typeof value !== "object") return null;
-
 const raw = value as Record<string, unknown>;
 
 return {
@@ -297,7 +355,7 @@ name: typeof raw.name === "string" ? raw.name : "",
 rating:
 typeof raw.rating === "number"
 ? Math.max(1, Math.min(5, raw.rating))
-: Number(raw.rating) || 5,
+: Math.max(1, Math.min(5, Number(raw.rating) || 5)),
 text: typeof raw.text === "string" ? raw.text : "",
 photos: normalizeMediaArray(raw.photos),
 date: typeof raw.date === "string" ? raw.date : new Date().toLocaleString(),
@@ -306,7 +364,6 @@ date: typeof raw.date === "string" ? raw.date : new Date().toLocaleString(),
 
 function normalizeVisit(value: unknown): VisitItem | null {
 if (!value || typeof value !== "object") return null;
-
 const raw = value as Record<string, unknown>;
 
 return {
@@ -324,7 +381,6 @@ date: typeof raw.date === "string" ? raw.date : new Date().toLocaleString(),
 
 function normalizePayment(value: unknown): PaymentItem | null {
 if (!value || typeof value !== "object") return null;
-
 const raw = value as Record<string, unknown>;
 
 return {
@@ -338,10 +394,14 @@ date: typeof raw.date === "string" ? raw.date : new Date().toLocaleString(),
 };
 }
 
-function normalizeSiteData(input: unknown): SiteData {
-if (!input || typeof input !== "object") return DEFAULT_SITE_DATA;
+function normalizeSiteData(payloadInput: unknown): SiteData {
+const payload = getRecord(payloadInput);
+const content = payload.content && typeof payload.content === "object" ? getRecord(payload.content) : payload;
 
-const raw = input as Partial<SiteData>;
+const portfolioSource =
+getRecord(payload.portfolio).constructor === Object && Object.keys(getRecord(payload.portfolio)).length
+? getRecord(payload.portfolio)
+: getRecord(content.portfolio);
 
 const portfolio: Record<Category, MediaItem[]> = {
 "Kitchen Remodel": [],
@@ -353,85 +413,223 @@ Renovation: [],
 };
 
 for (const category of CATEGORIES) {
-portfolio[category] = normalizeMediaArray(raw.portfolio?.[category]);
+portfolio[category] = normalizeMediaArray(portfolioSource[category]);
 }
 
-const phoneFromData =
-typeof raw.phoneNumber === "string" && raw.phoneNumber.trim()
-? raw.phoneNumber.trim()
-: DEFAULT_PHONE;
+const bg =
+firstMedia(content, [
+"backgroundImage",
+"backgroundUrl",
+"backgroundImageUrl",
+"heroBackground",
+"heroBackgroundUrl",
+]) || null;
+
+const heroBg =
+firstMedia(content, [
+"heroSectionBackgroundImage",
+"heroSectionBackgroundUrl",
+"heroBackgroundImage",
+"heroBackgroundUrl",
+"backgroundUrl",
+"backgroundImageUrl",
+]) || bg;
+
+const heroTop =
+firstMedia(content, [
+"heroTopImage",
+"heroImageTop",
+"rightCardTopImage",
+"topImage",
+"topImageUrl",
+"heroPanelImageTop",
+]) || null;
+
+const heroBottom =
+firstMedia(content, [
+"heroBottomImage",
+"heroImageBottom",
+"rightCardBottomImage",
+"bottomImage",
+"bottomImageUrl",
+"heroPanelImageBottom",
+]) || null;
+
+const reviewsRaw =
+Array.isArray(payload.reviews)
+? payload.reviews
+: Array.isArray(content.reviews)
+? content.reviews
+: [];
+
+const visitsRaw =
+Array.isArray(payload.visits)
+? payload.visits
+: Array.isArray(content.visits)
+? content.visits
+: [];
+
+const paymentsRaw =
+Array.isArray(payload.payments)
+? payload.payments
+: Array.isArray(content.payments)
+? content.payments
+: [];
 
 return {
-...DEFAULT_SITE_DATA,
-...raw,
+...DEFAULT_SITE,
 
-phoneNumber:
-phoneFromData.includes("678") || phoneFromData.includes("555")
-? DEFAULT_PHONE
-: phoneFromData,
+businessName: getString(content, ["businessName"], DEFAULT_SITE.businessName),
+phoneNumber: getString(content, ["phoneNumber", "phone"], DEFAULT_PHONE),
+zelleContact: getString(content, ["zelleContact", "zelle"], DEFAULT_SITE.zelleContact),
 
-backgroundImage: toMediaItem(raw.backgroundImage) || null,
-backgroundBrightness:
-typeof raw.backgroundBrightness === "number"
-? raw.backgroundBrightness
-: DEFAULT_SITE_DATA.backgroundBrightness,
+heroBadge: getString(content, ["heroBadge"], DEFAULT_SITE.heroBadge),
+heroTitleLine1: getString(content, ["heroTitleLine1", "heroTitle1"], DEFAULT_SITE.heroTitleLine1),
+heroTitleLine2: getString(content, ["heroTitleLine2", "heroTitle2"], DEFAULT_SITE.heroTitleLine2),
+heroSubtitle: getString(content, ["heroSubtitle", "subtitle"], DEFAULT_SITE.heroSubtitle),
 
-heroSectionBackgroundImage: toMediaItem(raw.heroSectionBackgroundImage) || null,
-heroSectionOverlay:
-typeof raw.heroSectionOverlay === "number"
-? raw.heroSectionOverlay
-: DEFAULT_SITE_DATA.heroSectionOverlay,
+backgroundImage: bg,
+heroSectionBackgroundImage: heroBg,
+heroTopImage: heroTop,
+heroBottomImage: heroBottom,
+
+backgroundBrightness: getNumber(content, ["backgroundBrightness"], DEFAULT_SITE.backgroundBrightness),
+heroSectionOverlay: getNumber(content, ["heroSectionOverlay", "heroOverlay"], DEFAULT_SITE.heroSectionOverlay),
+
+startCardTitle: getString(content, ["startCardTitle", "quickStartTitle"], DEFAULT_SITE.startCardTitle),
+startCardText: getString(content, ["startCardText", "quickStartText"], DEFAULT_SITE.startCardText),
+
+servicesTitle: getString(content, ["servicesTitle"], DEFAULT_SITE.servicesTitle),
+servicesSubtitle: getString(content, ["servicesSubtitle"], DEFAULT_SITE.servicesSubtitle),
+
+portfolioTitle: getString(content, ["portfolioTitle"], DEFAULT_SITE.portfolioTitle),
+portfolioSubtitle: getString(content, ["portfolioSubtitle"], DEFAULT_SITE.portfolioSubtitle),
+
+reviewsTitle: getString(content, ["reviewsTitle"], DEFAULT_SITE.reviewsTitle),
+reviewsSubtitle: getString(content, ["reviewsSubtitle"], DEFAULT_SITE.reviewsSubtitle),
+
+aboutTitle: getString(content, ["aboutTitle"], DEFAULT_SITE.aboutTitle),
+aboutSubtitle: getString(content, ["aboutSubtitle"], DEFAULT_SITE.aboutSubtitle),
+
+faqTitle: getString(content, ["faqTitle"], DEFAULT_SITE.faqTitle),
+faqSubtitle: getString(content, ["faqSubtitle"], DEFAULT_SITE.faqSubtitle),
+
+quickTitle: getString(content, ["quickTitle"], DEFAULT_SITE.quickTitle),
+quickSubtitle: getString(content, ["quickSubtitle"], DEFAULT_SITE.quickSubtitle),
+
+ctaTitle: getString(content, ["ctaTitle"], DEFAULT_SITE.ctaTitle),
+ctaText: getString(content, ["ctaText"], DEFAULT_SITE.ctaText),
+
+stat1Value: getString(content, ["stat1Value", "stat1"], DEFAULT_SITE.stat1Value),
+stat1Label: getString(content, ["stat1Label"], DEFAULT_SITE.stat1Label),
+stat2Value: getString(content, ["stat2Value", "stat2"], DEFAULT_SITE.stat2Value),
+stat2Label: getString(content, ["stat2Label"], DEFAULT_SITE.stat2Label),
+stat3Value: getString(content, ["stat3Value", "stat3"], DEFAULT_SITE.stat3Value),
+stat3Label: getString(content, ["stat3Label"], DEFAULT_SITE.stat3Label),
+stat4Value: getString(content, ["stat4Value", "stat4"], DEFAULT_SITE.stat4Value),
+stat4Label: getString(content, ["stat4Label"], DEFAULT_SITE.stat4Label),
 
 portfolio,
 
-reviews: Array.isArray(raw.reviews)
-? raw.reviews.map(normalizeReview).filter((item): item is ReviewItem => Boolean(item))
-: [],
-
-visits: Array.isArray(raw.visits)
-? raw.visits.map(normalizeVisit).filter((item): item is VisitItem => Boolean(item))
-: [],
-
-payments: Array.isArray(raw.payments)
-? raw.payments.map(normalizePayment).filter((item): item is PaymentItem => Boolean(item))
-: [],
+reviews: reviewsRaw.map(normalizeReview).filter((item): item is ReviewItem => Boolean(item)),
+visits: visitsRaw.map(normalizeVisit).filter((item): item is VisitItem => Boolean(item)),
+payments: paymentsRaw.map(normalizePayment).filter((item): item is PaymentItem => Boolean(item)),
 };
 }
 
-async function loadSiteData(): Promise<SiteData> {
-  try {
-    const res = await fetch("/api/site-data", {
-      cache: "no-store",
-    });
+function makePayloadForSave(currentPayload: SitePayload | null, site: SiteData): SitePayload {
+const existing = currentPayload && typeof currentPayload === "object" ? currentPayload : {};
 
-    if (!res.ok) throw new Error("Failed to load site data.");
-
-    const json = await res.json();
-    const payload = json?.data ?? json;
-
-    const content = payload?.content
-      ? {
-          ...payload.content,
-          reviews: payload.reviews ?? payload.content.reviews ?? [],
-          visits: payload.visits ?? payload.content.visits ?? [],
-          payments: payload.payments ?? payload.content.payments ?? [],
-        }
-      : payload;
-
-    return normalizeSiteData(content);
-  } catch (error) {
-    console.error("Homepage site-data load failed:", error);
-    return DEFAULT_SITE_DATA;
-  }
+if (existing.content && typeof existing.content === "object") {
+return {
+...existing,
+content: {
+...existing.content,
+},
+portfolio: site.portfolio,
+reviews: site.reviews,
+visits: site.visits,
+payments: site.payments,
+updatedAt: new Date().toISOString(),
+};
 }
 
-async function saveSiteData(data: SiteData): Promise<void> {
+return {
+content: {
+businessName: site.businessName,
+phoneNumber: site.phoneNumber,
+zelleContact: site.zelleContact,
+heroBadge: site.heroBadge,
+heroTitleLine1: site.heroTitleLine1,
+heroTitleLine2: site.heroTitleLine2,
+heroSubtitle: site.heroSubtitle,
+backgroundImage: site.backgroundImage,
+heroSectionBackgroundImage: site.heroSectionBackgroundImage,
+heroTopImage: site.heroTopImage,
+heroBottomImage: site.heroBottomImage,
+backgroundBrightness: site.backgroundBrightness,
+heroSectionOverlay: site.heroSectionOverlay,
+startCardTitle: site.startCardTitle,
+startCardText: site.startCardText,
+servicesTitle: site.servicesTitle,
+servicesSubtitle: site.servicesSubtitle,
+portfolioTitle: site.portfolioTitle,
+portfolioSubtitle: site.portfolioSubtitle,
+reviewsTitle: site.reviewsTitle,
+reviewsSubtitle: site.reviewsSubtitle,
+aboutTitle: site.aboutTitle,
+aboutSubtitle: site.aboutSubtitle,
+faqTitle: site.faqTitle,
+faqSubtitle: site.faqSubtitle,
+quickTitle: site.quickTitle,
+quickSubtitle: site.quickSubtitle,
+ctaTitle: site.ctaTitle,
+ctaText: site.ctaText,
+stat1Value: site.stat1Value,
+stat1Label: site.stat1Label,
+stat2Value: site.stat2Value,
+stat2Label: site.stat2Label,
+stat3Value: site.stat3Value,
+stat3Label: site.stat3Label,
+stat4Value: site.stat4Value,
+stat4Label: site.stat4Label,
+},
+portfolio: site.portfolio,
+reviews: site.reviews,
+visits: site.visits,
+payments: site.payments,
+updatedAt: new Date().toISOString(),
+};
+}
+
+async function loadSitePayload(): Promise<{ payload: SitePayload | null; site: SiteData }> {
+try {
+const res = await fetch("/api/site-data", { cache: "no-store" });
+if (!res.ok) throw new Error("Failed to load site data.");
+
+const json = await res.json();
+const payload = (json?.data ?? json) as SitePayload | null;
+
+return {
+payload,
+site: normalizeSiteData(payload),
+};
+} catch (error) {
+console.error("Homepage site-data load failed:", error);
+return {
+payload: null,
+site: DEFAULT_SITE,
+};
+}
+}
+
+async function saveSitePayload(payload: SitePayload): Promise<void> {
 const res = await fetch("/api/site-data", {
 method: "POST",
 headers: {
 "Content-Type": "application/json",
 },
-body: JSON.stringify({ data }),
+body: JSON.stringify({ data: payload }),
 });
 
 if (!res.ok) {
@@ -476,17 +674,10 @@ return uploaded;
 }
 
 function phoneHref(phone: string) {
-const clean = phone.replace(/[^\d+]/g, "");
-return `tel:${clean}`;
+return `tel:${phone.replace(/[^\d+]/g, "")}`;
 }
 
-function GlassCard({
-children,
-className = "",
-}: {
-children: ReactNode;
-className?: string;
-}) {
+function GlassCard({ children, className = "" }: { children: ReactNode; className?: string }) {
 return (
 <div
 className={`rounded-[2rem] border border-white/10 bg-white/[0.055] shadow-[0_10px_50px_rgba(0,0,0,0.25)] backdrop-blur-xl ${className}`}
@@ -516,26 +707,11 @@ return (
 );
 }
 
-function MediaImage({
-item,
-className = "",
-alt,
-}: {
-item: MediaItem;
-className?: string;
-alt?: string;
-}) {
+function MediaImage({ item, className = "", alt }: { item: MediaItem; className?: string; alt?: string }) {
 const src = mediaUrl(item);
 if (!src) return null;
 
-return (
-<img
-src={src}
-alt={alt || item.alt || item.name || "image"}
-className={className}
-draggable={false}
-/>
-);
+return <img src={src} alt={alt || item.alt || item.name || "image"} className={className} draggable={false} />;
 }
 
 function StarRow({ rating }: { rating: number }) {
@@ -582,7 +758,6 @@ className="rounded-full border border-white/10 px-4 py-2 text-xs font-semibold t
 Close
 </button>
 </div>
-
 {children}
 </div>
 </div>
@@ -592,7 +767,8 @@ Close
 export default function HomePage() {
 const router = useRouter();
 
-const [site, setSite] = useState<SiteData>(DEFAULT_SITE_DATA);
+const [payload, setPayload] = useState<SitePayload | null>(null);
+const [site, setSite] = useState<SiteData>(DEFAULT_SITE);
 const [ready, setReady] = useState(false);
 
 const [showVisit, setShowVisit] = useState(false);
@@ -600,7 +776,6 @@ const [showPayment, setShowPayment] = useState(false);
 const [selectedImage, setSelectedImage] = useState<MediaItem | null>(null);
 
 const [siteViews, setSiteViews] = useState(0);
-
 const [visitBusy, setVisitBusy] = useState(false);
 const [paymentBusy, setPaymentBusy] = useState(false);
 const [reviewBusy, setReviewBusy] = useState(false);
@@ -639,9 +814,10 @@ const reviewsRef = useRef<HTMLDivElement | null>(null);
 useEffect(() => {
 let mounted = true;
 
-loadSiteData().then((loaded) => {
+loadSitePayload().then(({ payload: loadedPayload, site: loadedSite }) => {
 if (!mounted) return;
-setSite(loaded);
+setPayload(loadedPayload);
+setSite(loadedSite);
 setReady(true);
 });
 
@@ -654,22 +830,28 @@ mounted = false;
 };
 }, []);
 
-const pageBackgroundUrl = mediaUrl(site.backgroundImage);
-const heroSectionBackgroundUrl = mediaUrl(site.heroSectionBackgroundImage);
+const pageBackgroundUrl = mediaUrl(site.backgroundImage) || mediaUrl(site.heroSectionBackgroundImage);
+const heroSectionBackgroundUrl = mediaUrl(site.heroSectionBackgroundImage) || mediaUrl(site.backgroundImage);
 const selectedImageUrl = mediaUrl(selectedImage);
 
 const heroPreviewImages = useMemo(() => {
-const ordered = [
+const manual = [site.heroTopImage, site.heroBottomImage].filter(
+(item): item is MediaItem => Boolean(item && mediaUrl(item))
+);
+
+if (manual.length) return manual.slice(0, 2);
+
+return [
 ...site.portfolio["Bathroom Remodel"],
 ...site.portfolio["Kitchen Remodel"],
 ...site.portfolio["Renovation"],
 ...site.portfolio["Custom Build"],
 ...site.portfolio["Flooring Project"],
 ...site.portfolio["Repair Work"],
-];
-
-return ordered.filter((item) => mediaUrl(item)).slice(0, 2);
-}, [site.portfolio]);
+]
+.filter((item) => mediaUrl(item))
+.slice(0, 2);
+}, [site]);
 
 const previewCards = useMemo(
 () => [
@@ -725,6 +907,13 @@ background:
 "radial-gradient(circle at top left, rgba(59,130,246,0.18), transparent 26%), radial-gradient(circle at top right, rgba(34,197,94,0.15), transparent 24%), linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01))",
 };
 
+const saveSite = async (nextSite: SiteData) => {
+const nextPayload = makePayloadForSave(payload, nextSite);
+await saveSitePayload(nextPayload);
+setPayload(nextPayload);
+setSite(nextSite);
+};
+
 const uploadReviewPhotos = async (files: FileList | null) => {
 setReviewStatus("");
 
@@ -759,7 +948,7 @@ setVisitBusy(true);
 setVisitStatus("");
 
 try {
-const payload: VisitItem = {
+const visit: VisitItem = {
 id: uid(),
 name: visitForm.name.trim(),
 email: visitForm.email.trim(),
@@ -771,23 +960,20 @@ details: visitForm.details.trim(),
 date: new Date().toLocaleString(),
 };
 
-const nextSite: SiteData = {
+const nextSite = {
 ...site,
-visits: [payload, ...site.visits],
+visits: [visit, ...site.visits],
 };
 
-setSite(nextSite);
-await saveSiteData(nextSite);
+await saveSite(nextSite);
 
 try {
 await fetch("/api/visit", {
 method: "POST",
 headers: { "Content-Type": "application/json" },
-body: JSON.stringify(payload),
+body: JSON.stringify(visit),
 });
-} catch {
-// Visit still saves globally even if SMS route is not configured.
-}
+} catch {}
 
 setVisitForm({
 name: "",
@@ -817,7 +1003,7 @@ setPaymentBusy(true);
 setPaymentStatus("");
 
 try {
-const payload: PaymentItem = {
+const payment: PaymentItem = {
 id: uid(),
 amount: paymentForm.amount.trim(),
 name: paymentForm.name.trim(),
@@ -827,13 +1013,12 @@ proofs: paymentProofs,
 date: new Date().toLocaleString(),
 };
 
-const nextSite: SiteData = {
+const nextSite = {
 ...site,
-payments: [payload, ...site.payments],
+payments: [payment, ...site.payments],
 };
 
-setSite(nextSite);
-await saveSiteData(nextSite);
+await saveSite(nextSite);
 
 setPaymentForm({
 amount: "",
@@ -860,7 +1045,7 @@ setReviewBusy(true);
 setReviewStatus("");
 
 try {
-const payload: ReviewItem = {
+const review: ReviewItem = {
 id: uid(),
 name: reviewForm.name.trim(),
 rating: Number(reviewForm.rating) || 5,
@@ -869,13 +1054,12 @@ photos: reviewPhotos,
 date: new Date().toLocaleString(),
 };
 
-const nextSite: SiteData = {
+const nextSite = {
 ...site,
-reviews: [payload, ...site.reviews],
+reviews: [review, ...site.reviews],
 };
 
-setSite(nextSite);
-await saveSiteData(nextSite);
+await saveSite(nextSite);
 
 setReviewForm({
 name: "",
@@ -919,10 +1103,7 @@ background:
 <div
 className="pointer-events-none fixed inset-0 -z-10"
 style={{
-background: `rgba(0,0,0,${Math.max(
-0.08,
-Math.min(0.82, site.backgroundBrightness)
-)})`,
+background: `rgba(0,0,0,${Math.max(0.03, Math.min(0.82, site.backgroundBrightness))})`,
 }}
 />
 
@@ -938,27 +1119,17 @@ className="shrink-0 text-[11px] font-bold uppercase tracking-[0.25em] text-white
 </button>
 
 <nav className="hidden items-center gap-6 text-sm md:flex">
-<button
-type="button"
-onClick={() => router.push("/portfolio")}
-className="text-white/75 transition hover:text-white"
->
+<button type="button" onClick={() => router.push("/portfolio")} className="text-white/75 hover:text-white">
 View Portfolio
 </button>
 <button
 type="button"
-onClick={() =>
-reviewsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
-}
-className="text-white/75 transition hover:text-white"
+onClick={() => reviewsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+className="text-white/75 hover:text-white"
 >
 Reviews
 </button>
-<button
-type="button"
-onClick={() => setShowVisit(true)}
-className="text-white/75 transition hover:text-white"
->
+<button type="button" onClick={() => setShowVisit(true)} className="text-white/75 hover:text-white">
 Request Visit
 </button>
 <button
@@ -977,34 +1148,16 @@ Call Now
 </div>
 
 <div className="mt-3 flex flex-wrap gap-2 md:hidden">
-<button
-type="button"
-onClick={() => router.push("/portfolio")}
-className="rounded-full border border-white/10 px-3 py-2 text-xs font-semibold text-white/80"
->
+<button type="button" onClick={() => router.push("/portfolio")} className="rounded-full border border-white/10 px-3 py-2 text-xs font-semibold text-white/80">
 Portfolio
 </button>
-<button
-type="button"
-onClick={() =>
-reviewsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
-}
-className="rounded-full border border-white/10 px-3 py-2 text-xs font-semibold text-white/80"
->
+<button type="button" onClick={() => reviewsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} className="rounded-full border border-white/10 px-3 py-2 text-xs font-semibold text-white/80">
 Reviews
 </button>
-<button
-type="button"
-onClick={() => setShowVisit(true)}
-className="rounded-full border border-white/10 px-3 py-2 text-xs font-semibold text-white/80"
->
+<button type="button" onClick={() => setShowVisit(true)} className="rounded-full border border-white/10 px-3 py-2 text-xs font-semibold text-white/80">
 Request Visit
 </button>
-<button
-type="button"
-onClick={() => setShowPayment(true)}
-className="rounded-full border border-white/10 px-3 py-2 text-xs font-semibold text-white/80"
->
+<button type="button" onClick={() => setShowPayment(true)} className="rounded-full border border-white/10 px-3 py-2 text-xs font-semibold text-white/80">
 Payment
 </button>
 <a href={phoneHref(site.phoneNumber)}>
@@ -1029,24 +1182,13 @@ background:
 <div
 className="absolute inset-0"
 style={{
-background: `rgba(0,0,0,${Math.max(
-0.2,
-Math.min(0.88, site.heroSectionOverlay)
-)})`,
+background: `rgba(0,0,0,${Math.max(0.12, Math.min(0.88, site.heroSectionOverlay))})`,
 }}
 />
 
 <div className="mx-auto grid min-h-[100vh] max-w-7xl gap-6 px-4 py-8 md:px-8 md:py-10 lg:grid-cols-[1.08fr_.92fr] lg:items-center">
 <div className="relative z-10">
 <GlassCard className="relative overflow-hidden p-6 md:p-10">
-<div
-className="absolute inset-0"
-style={{
-background:
-"radial-gradient(circle at top left, rgba(59,130,246,0.20), transparent 34%), radial-gradient(circle at bottom right, rgba(34,197,94,0.12), transparent 30%)",
-}}
-/>
-
 <div className="relative">
 <p className="text-[11px] uppercase tracking-[0.35em] text-white/45 md:text-xs">
 {site.heroBadge}
@@ -1062,33 +1204,21 @@ background:
 </p>
 
 <div className="mt-8 flex flex-wrap gap-3">
-<button
-type="button"
-onClick={() => setShowVisit(true)}
-className="rounded-full bg-white px-5 py-3 font-semibold text-black transition hover:scale-[1.02]"
->
+<button type="button" onClick={() => setShowVisit(true)} className="rounded-full bg-white px-5 py-3 font-semibold text-black transition hover:scale-[1.02]">
 Request Visit
 </button>
-<button
-type="button"
-onClick={() => router.push("/portfolio")}
-className="rounded-full border border-white/15 px-5 py-3 font-semibold text-white transition hover:bg-white/10"
->
+<button type="button" onClick={() => router.push("/portfolio")} className="rounded-full border border-white/15 px-5 py-3 font-semibold text-white transition hover:bg-white/10">
 View Portfolio
 </button>
-<button
-type="button"
-onClick={() => setShowPayment(true)}
-className="rounded-full border border-white/15 px-5 py-3 font-semibold text-white transition hover:bg-white/10"
->
+<button type="button" onClick={() => setShowPayment(true)} className="rounded-full border border-white/15 px-5 py-3 font-semibold text-white transition hover:bg-white/10">
 Make Payment
 </button>
 </div>
 
 <div className="mt-8 flex flex-wrap gap-5 text-sm text-white/58">
 <span>{siteViews} site views</span>
-<span>{site.stat3}</span>
-<span>Quality craftsmanship</span>
+<span>{site.stat3Value} {site.stat3Label}</span>
+<span>{site.stat4Value} {site.stat4Label}</span>
 <span>Transparent pricing</span>
 </div>
 </div>
@@ -1099,30 +1229,15 @@ Make Payment
 <GlassCard className="overflow-hidden p-5 md:p-6">
 <div className="grid gap-4 lg:grid-cols-[1fr_0.9fr]">
 <div>
-<p className="text-[11px] uppercase tracking-[0.35em] text-white/45 md:text-xs">
-Start Here
-</p>
-<h2 className="mt-3 text-3xl font-black leading-tight md:text-4xl">
-Quote, visit, or pay in one place.
-</h2>
-<p className="mt-3 text-sm leading-7 text-white/70">
-Customers can send a message, upload pictures, book a site visit, leave a review,
-or submit payment proof.
-</p>
+<p className="text-[11px] uppercase tracking-[0.35em] text-white/45 md:text-xs">Start Here</p>
+<h2 className="mt-3 text-3xl font-black leading-tight md:text-4xl">{site.startCardTitle}</h2>
+<p className="mt-3 text-sm leading-7 text-white/70">{site.startCardText}</p>
 
 <div className="mt-6 flex flex-wrap gap-3">
-<button
-type="button"
-onClick={() => router.push("/portfolio")}
-className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-black"
->
+<button type="button" onClick={() => router.push("/portfolio")} className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-black">
 View Portfolio
 </button>
-<button
-type="button"
-onClick={() => setShowVisit(true)}
-className="rounded-full border border-white/15 px-5 py-3 text-sm font-semibold text-white"
->
+<button type="button" onClick={() => setShowVisit(true)} className="rounded-full border border-white/15 px-5 py-3 text-sm font-semibold text-white">
 Request Visit
 </button>
 </div>
@@ -1131,12 +1246,7 @@ Request Visit
 <div className="grid gap-3">
 {heroPreviewImages.length > 0 ? (
 heroPreviewImages.map((item) => (
-<button
-key={item.id}
-type="button"
-onClick={() => setSelectedImage(item)}
-className="overflow-hidden rounded-[1.5rem] border border-white/10 bg-black/25"
->
+<button key={item.id} type="button" onClick={() => setSelectedImage(item)} className="overflow-hidden rounded-[1.5rem] border border-white/10 bg-black/25">
 <MediaImage item={item} className="h-32 w-full object-cover md:h-36" />
 </button>
 ))
@@ -1155,16 +1265,14 @@ Strong portfolio preview
 </GlassCard>
 
 <div className="grid grid-cols-2 gap-4">
-<StatPill value={site.stat1} label="projects" />
-<StatPill value={site.stat2} label="service" />
+<StatPill value={site.stat1Value} label={site.stat1Label} />
+<StatPill value={site.stat2Value} label={site.stat2Label} />
 </div>
 
 <GlassCard className="p-5">
 <div className="grid gap-4 sm:grid-cols-2">
 <div className="rounded-[1.4rem] border border-white/10 bg-white/5 p-5">
-<p className="text-xs uppercase tracking-[0.3em] text-white/45">
-Portfolio preview
-</p>
+<p className="text-xs uppercase tracking-[0.3em] text-white/45">Portfolio preview</p>
 <p className="mt-3 text-2xl font-bold">Selected work only.</p>
 <p className="mt-3 text-sm text-white/65">
 The gallery lives on its own page so the homepage stays clean and premium.
@@ -1173,15 +1281,9 @@ The gallery lives on its own page so the homepage stays clean and premium.
 
 <div className="rounded-[1.4rem] border border-white/10 bg-white/5 p-5">
 <p className="text-xs uppercase tracking-[0.3em] text-white/45">Action flow</p>
-<p className="mt-3 text-sm text-white/70">
-Click top buttons for visit or payment.
-</p>
-<p className="mt-2 text-sm text-white/70">
-Click portfolio to go to the gallery page.
-</p>
-<p className="mt-2 text-sm text-white/70">
-Add reviews with photos on the site.
-</p>
+<p className="mt-3 text-sm text-white/70">Click top buttons for visit or payment.</p>
+<p className="mt-2 text-sm text-white/70">Click portfolio to go to the gallery page.</p>
+<p className="mt-2 text-sm text-white/70">Add reviews with photos on the site.</p>
 </div>
 </div>
 </GlassCard>
@@ -1194,37 +1296,19 @@ Add reviews with photos on the site.
 <div className="overflow-hidden rounded-[2.2rem] border border-black/10 bg-gradient-to-r from-emerald-400 via-green-400 to-lime-300 px-8 py-14 text-black shadow-[0_20px_80px_rgba(20,255,130,0.12)]">
 <div className="flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
 <div className="max-w-3xl">
-<p className="text-xs uppercase tracking-[0.35em] text-black/60">
-Ready to start
-</p>
-<h2 className="mt-3 text-4xl font-black leading-[0.95] md:text-6xl">
-Book a visit, get a quote, or make a payment.
-</h2>
-<p className="mt-4 max-w-2xl text-sm leading-7 text-black/75">
-Use the buttons above to keep the customer flow fast and clean.
-</p>
+<p className="text-xs uppercase tracking-[0.35em] text-black/60">Ready to start</p>
+<h2 className="mt-3 text-4xl font-black leading-[0.95] md:text-6xl">{site.ctaTitle}</h2>
+<p className="mt-4 max-w-2xl text-sm leading-7 text-black/75">{site.ctaText}</p>
 </div>
 
 <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
-<button
-type="button"
-onClick={() => setShowVisit(true)}
-className="rounded-full bg-black px-6 py-3 font-semibold text-white"
->
+<button type="button" onClick={() => setShowVisit(true)} className="rounded-full bg-black px-6 py-3 font-semibold text-white">
 Request Visit
 </button>
-<button
-type="button"
-onClick={() => router.push("/portfolio")}
-className="rounded-full border border-black/15 px-6 py-3 font-semibold text-black"
->
+<button type="button" onClick={() => router.push("/portfolio")} className="rounded-full border border-black/15 px-6 py-3 font-semibold text-black">
 View Portfolio
 </button>
-<button
-type="button"
-onClick={() => setShowPayment(true)}
-className="rounded-full border border-black/15 px-6 py-3 font-semibold text-black"
->
+<button type="button" onClick={() => setShowPayment(true)} className="rounded-full border border-black/15 px-6 py-3 font-semibold text-black">
 Make Payment
 </button>
 </div>
@@ -1253,16 +1337,8 @@ Premium
 
 <section className="mx-auto max-w-7xl px-4 py-24 md:px-8">
 <div className="flex items-end justify-between gap-4">
-<SectionTitle
-eyebrow="Portfolio preview"
-title={site.portfolioTitle}
-text={site.portfolioSubtitle}
-/>
-<button
-type="button"
-onClick={() => router.push("/portfolio")}
-className="hidden rounded-full border border-white/15 px-5 py-3 text-sm font-semibold text-white md:block"
->
+<SectionTitle eyebrow="Portfolio preview" title={site.portfolioTitle} text={site.portfolioSubtitle} />
+<button type="button" onClick={() => router.push("/portfolio")} className="hidden rounded-full border border-white/15 px-5 py-3 text-sm font-semibold text-white md:block">
 View Portfolio
 </button>
 </div>
@@ -1281,36 +1357,22 @@ background:
 }}
 >
 {image ? (
-<button
-type="button"
-onClick={() => setSelectedImage(image)}
-className="block h-full w-full"
->
+<button type="button" onClick={() => setSelectedImage(image)} className="block h-full w-full">
 <MediaImage item={image} className="h-56 w-full object-cover" />
 </button>
 ) : null}
 </div>
 
 <div className="p-6">
-<p className="text-xs uppercase tracking-[0.3em] text-white/45">
-Portfolio preview
-</p>
+<p className="text-xs uppercase tracking-[0.3em] text-white/45">Portfolio preview</p>
 <h3 className="mt-3 text-2xl font-bold">{card.title}</h3>
 <p className="mt-3 text-sm leading-7 text-white/65">{card.text}</p>
 
 <div className="mt-5 flex gap-3">
-<button
-type="button"
-onClick={() => router.push("/portfolio")}
-className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-black"
->
+<button type="button" onClick={() => router.push("/portfolio")} className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-black">
 View Portfolio
 </button>
-<button
-type="button"
-onClick={() => setShowVisit(true)}
-className="rounded-full border border-white/15 px-4 py-2 text-sm font-semibold text-white"
->
+<button type="button" onClick={() => setShowVisit(true)} className="rounded-full border border-white/15 px-4 py-2 text-sm font-semibold text-white">
 Request Visit
 </button>
 </div>
@@ -1347,12 +1409,7 @@ site.reviews.slice(0, 3).map((review) => (
 {review.photos.length > 0 && (
 <div className="mt-4 grid grid-cols-2 gap-3">
 {review.photos.map((photo) => (
-<button
-type="button"
-key={photo.id}
-onClick={() => setSelectedImage(photo)}
-className="overflow-hidden rounded-2xl border border-white/10"
->
+<button type="button" key={photo.id} onClick={() => setSelectedImage(photo)} className="overflow-hidden rounded-2xl border border-white/10">
 <MediaImage item={photo} className="h-28 w-full object-cover" />
 </button>
 ))}
@@ -1368,17 +1425,8 @@ className="overflow-hidden rounded-2xl border border-white/10"
 <p className="mt-2 text-sm text-white/60">Reviews can include photos from the job.</p>
 
 <div className="mt-6 grid gap-4 md:grid-cols-2">
-<input
-value={reviewForm.name}
-onChange={(event) => setReviewForm({ ...reviewForm, name: event.target.value })}
-className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none"
-placeholder="Your name"
-/>
-<select
-value={reviewForm.rating}
-onChange={(event) => setReviewForm({ ...reviewForm, rating: event.target.value })}
-className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none"
->
+<input value={reviewForm.name} onChange={(event) => setReviewForm({ ...reviewForm, name: event.target.value })} className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none" placeholder="Your name" />
+<select value={reviewForm.rating} onChange={(event) => setReviewForm({ ...reviewForm, rating: event.target.value })} className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none">
 <option value="5">5 stars</option>
 <option value="4">4 stars</option>
 <option value="3">3 stars</option>
@@ -1387,34 +1435,18 @@ className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none"
 </select>
 </div>
 
-<textarea
-value={reviewForm.text}
-onChange={(event) => setReviewForm({ ...reviewForm, text: event.target.value })}
-className="mt-4 min-h-32 w-full rounded-2xl border border-white/10 bg-black/40 p-4 outline-none"
-placeholder="Write your review..."
-/>
+<textarea value={reviewForm.text} onChange={(event) => setReviewForm({ ...reviewForm, text: event.target.value })} className="mt-4 min-h-32 w-full rounded-2xl border border-white/10 bg-black/40 p-4 outline-none" placeholder="Write your review..." />
 
 <div className="mt-4 flex flex-wrap items-center gap-3">
 <label className="cursor-pointer rounded-full border border-white/10 px-5 py-3 text-sm text-white/75 transition hover:bg-white/10">
 Add review photos
-<input
-type="file"
-multiple
-accept="image/*"
-className="hidden"
-onChange={(event) => uploadReviewPhotos(event.target.files)}
-/>
+<input type="file" multiple accept="image/*" className="hidden" onChange={(event) => uploadReviewPhotos(event.target.files)} />
 </label>
 
 {reviewPhotos.length > 0 && (
 <div className="flex flex-wrap gap-2">
 {reviewPhotos.map((photo) => (
-<button
-type="button"
-key={photo.id}
-onClick={() => setSelectedImage(photo)}
-className="overflow-hidden rounded-2xl border border-white/10"
->
+<button type="button" key={photo.id} onClick={() => setSelectedImage(photo)} className="overflow-hidden rounded-2xl border border-white/10">
 <MediaImage item={photo} className="h-14 w-14 object-cover" />
 </button>
 ))}
@@ -1429,19 +1461,10 @@ className="overflow-hidden rounded-2xl border border-white/10"
 )}
 
 <div className="mt-5 flex flex-wrap gap-3">
-<button
-type="button"
-onClick={submitReview}
-disabled={reviewBusy}
-className="rounded-full bg-white px-6 py-3 font-semibold text-black disabled:opacity-60"
->
+<button type="button" onClick={submitReview} disabled={reviewBusy} className="rounded-full bg-white px-6 py-3 font-semibold text-black disabled:opacity-60">
 {reviewBusy ? "Saving..." : "Post Review"}
 </button>
-<button
-type="button"
-onClick={() => router.push("/portfolio")}
-className="rounded-full border border-white/15 px-6 py-3 font-semibold text-white"
->
+<button type="button" onClick={() => router.push("/portfolio")} className="rounded-full border border-white/15 px-6 py-3 font-semibold text-white">
 View Portfolio
 </button>
 </div>
@@ -1455,18 +1478,10 @@ View Portfolio
 <SectionTitle eyebrow="About" title={site.aboutTitle} text={site.aboutSubtitle} />
 
 <div className="mt-8 flex flex-wrap gap-3">
-<button
-type="button"
-onClick={() => setShowVisit(true)}
-className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-black"
->
+<button type="button" onClick={() => setShowVisit(true)} className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-black">
 Request Visit
 </button>
-<button
-type="button"
-onClick={() => router.push("/portfolio")}
-className="rounded-full border border-white/15 px-5 py-3 text-sm font-semibold text-white"
->
+<button type="button" onClick={() => router.push("/portfolio")} className="rounded-full border border-white/15 px-5 py-3 text-sm font-semibold text-white">
 View Portfolio
 </button>
 </div>
@@ -1484,21 +1499,15 @@ View Portfolio
 <div className="mt-5 grid gap-3">
 <div className="rounded-[1.4rem] border border-white/10 bg-white/5 p-5">
 <p className="font-semibold">Request Visit</p>
-<p className="mt-2 text-sm text-white/65">
-Opens only when clicked and gives a proper response after submission.
-</p>
+<p className="mt-2 text-sm text-white/65">Opens only when clicked and gives a proper response after submission.</p>
 </div>
 <div className="rounded-[1.4rem] border border-white/10 bg-white/5 p-5">
 <p className="font-semibold">Make Payment</p>
-<p className="mt-2 text-sm text-white/65">
-Opens the Zelle instructions only when pressed.
-</p>
+<p className="mt-2 text-sm text-white/65">Opens the Zelle instructions only when pressed.</p>
 </div>
 <div className="rounded-[1.4rem] border border-white/10 bg-white/5 p-5">
 <p className="font-semibold">View Portfolio</p>
-<p className="mt-2 text-sm text-white/65">
-Sends the user to the dedicated gallery page.
-</p>
+<p className="mt-2 text-sm text-white/65">Sends the user to the dedicated gallery page.</p>
 </div>
 </div>
 </GlassCard>
@@ -1521,35 +1530,16 @@ Sends the user to the dedicated gallery page.
 </section>
 
 <section className="mx-auto max-w-4xl px-4 py-24 md:px-8">
-<SectionTitle
-eyebrow="Contact"
-title={site.quickTitle}
-text={site.quickSubtitle}
-align="center"
-/>
+<SectionTitle eyebrow="Contact" title={site.quickTitle} text={site.quickSubtitle} align="center" />
 
 <div className="mt-10 grid gap-4 md:grid-cols-3">
-<button
-type="button"
-onClick={() => setShowVisit(true)}
-className="rounded-[1.6rem] border border-white/10 bg-white px-6 py-7 text-left font-semibold text-black"
->
+<button type="button" onClick={() => setShowVisit(true)} className="rounded-[1.6rem] border border-white/10 bg-white px-6 py-7 text-left font-semibold text-black">
 Request Visit
 </button>
-
-<button
-type="button"
-onClick={() => router.push("/portfolio")}
-className="rounded-[1.6rem] border border-white/10 bg-white/5 px-6 py-7 text-left font-semibold text-white"
->
+<button type="button" onClick={() => router.push("/portfolio")} className="rounded-[1.6rem] border border-white/10 bg-white/5 px-6 py-7 text-left font-semibold text-white">
 View Portfolio
 </button>
-
-<button
-type="button"
-onClick={() => setShowPayment(true)}
-className="rounded-[1.6rem] border border-white/10 bg-white/5 px-6 py-7 text-left font-semibold text-white"
->
+<button type="button" onClick={() => setShowPayment(true)} className="rounded-[1.6rem] border border-white/10 bg-white/5 px-6 py-7 text-left font-semibold text-white">
 Make Payment
 </button>
 </div>
@@ -1558,9 +1548,7 @@ Make Payment
 
 <Modal open={showVisit} onClose={() => setShowVisit(false)} title="Request Visit">
 <h3 className="mt-2 text-3xl font-black">Book a site visit</h3>
-<p className="mt-3 text-sm text-white/60">
-Fill this out so we can come check the job and schedule the next step.
-</p>
+<p className="mt-3 text-sm text-white/60">Fill this out so we can come check the job and schedule the next step.</p>
 
 {visitStatus && (
 <div className="mt-6 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-white/80">
@@ -1569,35 +1557,11 @@ Fill this out so we can come check the job and schedule the next step.
 )}
 
 <div className="mt-6 grid gap-4 md:grid-cols-2">
-<input
-value={visitForm.name}
-onChange={(event) => setVisitForm({ ...visitForm, name: event.target.value })}
-className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none"
-placeholder="Full name"
-/>
-<input
-value={visitForm.email}
-onChange={(event) => setVisitForm({ ...visitForm, email: event.target.value })}
-className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none"
-placeholder="Email"
-/>
-<input
-value={visitForm.phone}
-onChange={(event) => setVisitForm({ ...visitForm, phone: event.target.value })}
-className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none"
-placeholder="Phone number"
-/>
-<input
-value={visitForm.address}
-onChange={(event) => setVisitForm({ ...visitForm, address: event.target.value })}
-className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none"
-placeholder="Project address"
-/>
-<select
-value={visitForm.jobType}
-onChange={(event) => setVisitForm({ ...visitForm, jobType: event.target.value })}
-className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none"
->
+<input value={visitForm.name} onChange={(event) => setVisitForm({ ...visitForm, name: event.target.value })} className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none" placeholder="Full name" />
+<input value={visitForm.email} onChange={(event) => setVisitForm({ ...visitForm, email: event.target.value })} className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none" placeholder="Email" />
+<input value={visitForm.phone} onChange={(event) => setVisitForm({ ...visitForm, phone: event.target.value })} className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none" placeholder="Phone number" />
+<input value={visitForm.address} onChange={(event) => setVisitForm({ ...visitForm, address: event.target.value })} className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none" placeholder="Project address" />
+<select value={visitForm.jobType} onChange={(event) => setVisitForm({ ...visitForm, jobType: event.target.value })} className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none">
 <option value="">Job type</option>
 <option value="Kitchen Remodeling">Kitchen Remodeling</option>
 <option value="Bathroom Remodeling">Bathroom Remodeling</option>
@@ -1605,42 +1569,20 @@ className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none"
 <option value="Full Home Renovation">Full Home Renovation</option>
 <option value="Repair / Small Job">Repair / Small Job</option>
 </select>
-<input
-value={visitForm.preferredTime}
-onChange={(event) => setVisitForm({ ...visitForm, preferredTime: event.target.value })}
-className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none"
-placeholder="Preferred day / time"
-/>
+<input value={visitForm.preferredTime} onChange={(event) => setVisitForm({ ...visitForm, preferredTime: event.target.value })} className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none" placeholder="Preferred day / time" />
 </div>
 
-<textarea
-value={visitForm.details}
-onChange={(event) => setVisitForm({ ...visitForm, details: event.target.value })}
-className="mt-4 min-h-32 w-full rounded-2xl border border-white/10 bg-black/40 p-4 outline-none"
-placeholder="Tell us what you need done..."
-/>
+<textarea value={visitForm.details} onChange={(event) => setVisitForm({ ...visitForm, details: event.target.value })} className="mt-4 min-h-32 w-full rounded-2xl border border-white/10 bg-black/40 p-4 outline-none" placeholder="Tell us what you need done..." />
 
 <div className="mt-6 flex flex-wrap gap-3">
-<button
-type="button"
-onClick={submitVisit}
-disabled={visitBusy}
-className="rounded-full bg-white px-6 py-3 font-semibold text-black disabled:opacity-60"
->
+<button type="button" onClick={submitVisit} disabled={visitBusy} className="rounded-full bg-white px-6 py-3 font-semibold text-black disabled:opacity-60">
 {visitBusy ? "Submitting..." : "Submit Request"}
 </button>
-<button
-type="button"
-onClick={() => router.push("/portfolio")}
-className="rounded-full border border-white/15 px-6 py-3 font-semibold text-white"
->
+<button type="button" onClick={() => router.push("/portfolio")} className="rounded-full border border-white/15 px-6 py-3 font-semibold text-white">
 View Portfolio
 </button>
 <a href={phoneHref(site.phoneNumber)}>
-<button
-type="button"
-className="rounded-full border border-white/15 px-6 py-3 font-semibold text-white"
->
+<button type="button" className="rounded-full border border-white/15 px-6 py-3 font-semibold text-white">
 Call Now
 </button>
 </a>
@@ -1649,9 +1591,7 @@ Call Now
 
 <Modal open={showPayment} onClose={() => setShowPayment(false)} title="Make Payment">
 <h3 className="mt-2 text-3xl font-black">Zelle payment</h3>
-<p className="mt-3 text-sm text-white/60">
-Use Zelle to send your payment, then follow the steps below so we can review it.
-</p>
+<p className="mt-3 text-sm text-white/60">Use Zelle to send your payment, then follow the steps below so we can review it.</p>
 
 <div className="mt-6 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm">
 <span className="text-white/45">Zelle contact:</span> {site.zelleContact}
@@ -1660,73 +1600,36 @@ Use Zelle to send your payment, then follow the steps below so we can review it.
 <div className="mt-6 grid gap-4">
 <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
 <p className="text-xs uppercase tracking-[0.3em] text-white/45">Step 1</p>
-<p className="mt-2 text-sm text-white/75">
-Open your banking app or Zelle and send the amount shown.
-</p>
+<p className="mt-2 text-sm text-white/75">Open your banking app or Zelle and send the amount shown.</p>
 </div>
 <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
 <p className="text-xs uppercase tracking-[0.3em] text-white/45">Step 2</p>
-<p className="mt-2 text-sm text-white/75">
-Send it to the Zelle contact listed above.
-</p>
+<p className="mt-2 text-sm text-white/75">Send it to the Zelle contact listed above.</p>
 </div>
 <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
 <p className="text-xs uppercase tracking-[0.3em] text-white/45">Step 3</p>
-<p className="mt-2 text-sm text-white/75">
-Upload your payment screenshot and submit it for review.
-</p>
+<p className="mt-2 text-sm text-white/75">Upload your payment screenshot and submit it for review.</p>
 </div>
 </div>
 
 <div className="mt-6 grid gap-4 md:grid-cols-2">
-<input
-value={paymentForm.amount}
-onChange={(event) => setPaymentForm({ ...paymentForm, amount: event.target.value })}
-className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none"
-placeholder="Amount owed"
-/>
-<input
-value={paymentForm.name}
-onChange={(event) => setPaymentForm({ ...paymentForm, name: event.target.value })}
-className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none"
-placeholder="Your name"
-/>
-<input
-value={paymentForm.email}
-onChange={(event) => setPaymentForm({ ...paymentForm, email: event.target.value })}
-className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none md:col-span-2"
-placeholder="Your email"
-/>
+<input value={paymentForm.amount} onChange={(event) => setPaymentForm({ ...paymentForm, amount: event.target.value })} className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none" placeholder="Amount owed" />
+<input value={paymentForm.name} onChange={(event) => setPaymentForm({ ...paymentForm, name: event.target.value })} className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none" placeholder="Your name" />
+<input value={paymentForm.email} onChange={(event) => setPaymentForm({ ...paymentForm, email: event.target.value })} className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none md:col-span-2" placeholder="Your email" />
 </div>
 
-<textarea
-value={paymentForm.notes}
-onChange={(event) => setPaymentForm({ ...paymentForm, notes: event.target.value })}
-className="mt-4 min-h-28 w-full rounded-2xl border border-white/10 bg-black/40 p-4 outline-none"
-placeholder="Extra notes for the payment review"
-/>
+<textarea value={paymentForm.notes} onChange={(event) => setPaymentForm({ ...paymentForm, notes: event.target.value })} className="mt-4 min-h-28 w-full rounded-2xl border border-white/10 bg-black/40 p-4 outline-none" placeholder="Extra notes for the payment review" />
 
 <div className="mt-4 flex flex-wrap items-center gap-3">
 <label className="cursor-pointer rounded-full border border-white/10 px-5 py-3 text-sm text-white/75 transition hover:bg-white/10">
 Upload payment screenshot
-<input
-type="file"
-multiple
-accept="image/*"
-className="hidden"
-onChange={(event) => uploadPaymentProofs(event.target.files)}
-/>
+<input type="file" multiple accept="image/*" className="hidden" onChange={(event) => uploadPaymentProofs(event.target.files)} />
 </label>
 
 {paymentProofs.length > 0 && (
 <div className="flex flex-wrap gap-2">
 {paymentProofs.map((photo) => (
-<button
-type="button"
-key={photo.id}
-onClick={() => setSelectedImage(photo)}
-className="overflow-hidden rounded-2xl border border-white/10"
->
+<button type="button" key={photo.id} onClick={() => setSelectedImage(photo)} className="overflow-hidden rounded-2xl border border-white/10">
 <MediaImage item={photo} className="h-14 w-14 object-cover" />
 </button>
 ))}
@@ -1741,35 +1644,18 @@ className="overflow-hidden rounded-2xl border border-white/10"
 )}
 
 <div className="mt-6 flex flex-wrap gap-3">
-<button
-type="button"
-onClick={submitPayment}
-disabled={paymentBusy}
-className="rounded-full bg-white px-6 py-3 font-semibold text-black disabled:opacity-60"
->
+<button type="button" onClick={submitPayment} disabled={paymentBusy} className="rounded-full bg-white px-6 py-3 font-semibold text-black disabled:opacity-60">
 {paymentBusy ? "Submitting..." : "Submit Payment for Review"}
 </button>
-<button
-type="button"
-onClick={() => router.push("/portfolio")}
-className="rounded-full border border-white/15 px-6 py-3 font-semibold text-white"
->
+<button type="button" onClick={() => router.push("/portfolio")} className="rounded-full border border-white/15 px-6 py-3 font-semibold text-white">
 View Portfolio
 </button>
 </div>
 </Modal>
 
 {selectedImage && selectedImageUrl && (
-<button
-type="button"
-onClick={() => setSelectedImage(null)}
-className="fixed inset-0 z-[100] flex items-center justify-center bg-black/92 p-5"
->
-<img
-src={selectedImageUrl}
-alt={selectedImage.alt || selectedImage.name || "selected"}
-className="max-h-[92vh] max-w-[95vw] rounded-3xl shadow-2xl"
-/>
+<button type="button" onClick={() => setSelectedImage(null)} className="fixed inset-0 z-[100] flex items-center justify-center bg-black/92 p-5">
+<img src={selectedImageUrl} alt={selectedImage.alt || selectedImage.name || "selected"} className="max-h-[92vh] max-w-[95vw] rounded-3xl shadow-2xl" />
 </button>
 )}
 
