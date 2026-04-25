@@ -399,19 +399,30 @@ payments: Array.isArray(raw.payments)
 }
 
 async function loadSiteData(): Promise<SiteData> {
-try {
-const res = await fetch("/api/site-data", {
-cache: "no-store",
-});
+  try {
+    const res = await fetch("/api/site-data", {
+      cache: "no-store",
+    });
 
-if (!res.ok) throw new Error("Failed to load site data.");
+    if (!res.ok) throw new Error("Failed to load site data.");
 
-const json = await res.json();
-return normalizeSiteData(json?.data ?? json);
-} catch (error) {
-console.error("Homepage site-data load failed:", error);
-return DEFAULT_SITE_DATA;
-}
+    const json = await res.json();
+    const payload = json?.data ?? json;
+
+    const content = payload?.content
+      ? {
+          ...payload.content,
+          reviews: payload.reviews ?? payload.content.reviews ?? [],
+          visits: payload.visits ?? payload.content.visits ?? [],
+          payments: payload.payments ?? payload.content.payments ?? [],
+        }
+      : payload;
+
+    return normalizeSiteData(content);
+  } catch (error) {
+    console.error("Homepage site-data load failed:", error);
+    return DEFAULT_SITE_DATA;
+  }
 }
 
 async function saveSiteData(data: SiteData): Promise<void> {
