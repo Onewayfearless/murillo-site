@@ -13,9 +13,12 @@ type Category =
 
 type MediaItem = {
 id: string;
-name?: string;
-file?: File | null;
+url?: string;
 src?: string;
+pathname?: string;
+alt?: string;
+name?: string;
+createdAt?: string;
 };
 
 type ReviewItem = {
@@ -53,43 +56,51 @@ type SiteData = {
 businessName: string;
 phoneNumber: string;
 zelleContact: string;
+
 heroBadge: string;
 heroTitleLine1: string;
 heroTitleLine2: string;
 heroAccent: string;
 heroSubtitle: string;
+
 backgroundImage: MediaItem | null;
 backgroundBrightness: number;
+
 heroSectionBackgroundImage: MediaItem | null;
 heroSectionOverlay: number;
+
 servicesTitle: string;
 servicesSubtitle: string;
+
 portfolioTitle: string;
 portfolioSubtitle: string;
+
 reviewsTitle: string;
 reviewsSubtitle: string;
+
 aboutTitle: string;
 aboutSubtitle: string;
+
 faqTitle: string;
 faqSubtitle: string;
+
 quickTitle: string;
 quickSubtitle: string;
+
 contactTitle: string;
 contactSubtitle: string;
+
 stat1: string;
 stat2: string;
 stat3: string;
+
 portfolio: Record<Category, MediaItem[]>;
 reviews: ReviewItem[];
 visits: VisitItem[];
 payments: PaymentItem[];
 };
 
-const DB_NAME = "MURILLO_SITE_DB";
-const STORE_NAME = "site";
-const STORE_KEY = "state";
-
-const categories: Category[] = [
+const CATEGORIES: Category[] = [
 "Kitchen Remodel",
 "Bathroom Remodel",
 "Flooring Project",
@@ -97,6 +108,68 @@ const categories: Category[] = [
 "Repair Work",
 "Renovation",
 ];
+
+const DEFAULT_PHONE = "404-389-3672";
+
+const DEFAULT_SITE_DATA: SiteData = {
+businessName: "Murillo Renovations LLC",
+phoneNumber: DEFAULT_PHONE,
+zelleContact: "your-zelle@email.com",
+
+heroBadge: "Licensed & Insured General Contractor",
+heroTitleLine1: "Luxury Homes",
+heroTitleLine2: "Done Once.",
+heroAccent: "Done Once.",
+heroSubtitle:
+"Premium remodeling, renovation, and custom construction with a clean process, strong communication, and results that feel expensive.",
+
+backgroundImage: null,
+backgroundBrightness: 0.45,
+
+heroSectionBackgroundImage: null,
+heroSectionOverlay: 0.58,
+
+servicesTitle: "Everything the site should sell",
+servicesSubtitle:
+"Keep the homepage premium with strong service blocks, direct action buttons, and clear customer paths.",
+
+portfolioTitle: "Selected work",
+portfolioSubtitle:
+"This page is the gallery preview. The full portfolio lives on its own page, and each category can hold as many images as you want.",
+
+reviewsTitle: "What clients say",
+reviewsSubtitle: "Show real reviews on the page and let customers upload photos with them.",
+
+aboutTitle: "A contractor brand built to feel premium.",
+aboutSubtitle:
+"Murillo Renovations LLC handles remodeling, repairs, custom projects, and high-impact home improvements with a clean process from start to finish.",
+
+faqTitle: "Common questions",
+faqSubtitle: "Keep answers short, useful, and easy to scan.",
+
+quickTitle: "Quick actions",
+quickSubtitle: "The homepage should always keep a customer one click away from the next step.",
+
+contactTitle: "Contact",
+contactSubtitle: "Keep the call, visit, payment, and portfolio paths obvious.",
+
+stat1: "100+",
+stat2: "5★",
+stat3: "Fast response",
+
+portfolio: {
+"Kitchen Remodel": [],
+"Bathroom Remodel": [],
+"Flooring Project": [],
+"Custom Build": [],
+"Repair Work": [],
+Renovation: [],
+},
+
+reviews: [],
+visits: [],
+payments: [],
+};
 
 const SERVICES = [
 {
@@ -134,11 +207,11 @@ description:
 const FAQ = [
 {
 q: "How does the request visit button work?",
-a: "It opens the form only when clicked. Submitting saves the request and shows a success message.",
+a: "It opens the form only when clicked. Submitting saves the request and sends the request to the owner if notifications are configured.",
 },
 {
 q: "How does the payment button work?",
-a: "It opens a Zelle payment panel only when clicked, with screenshot upload and review submission.",
+a: "It opens a Zelle payment panel only when clicked, with screenshot upload and payment review submission.",
 },
 {
 q: "Can customers add review photos?",
@@ -150,88 +223,62 @@ a: "It goes to a separate page at /portfolio so the gallery is not mixed into th
 },
 ];
 
-const defaultData: SiteData = {
-businessName: "Murillo Renovations LLC",
-phoneNumber: "+1 (678) 555-1234",
-zelleContact: "your-zelle@email.com",
-heroBadge: "Licensed & Insured General Contractor",
-heroTitleLine1: "Luxury Homes",
-heroTitleLine2: "Done Once.",
-heroAccent: "Done Once.",
-heroSubtitle:
-"Premium remodeling, renovation, and custom construction with a clean process, strong communication, and results that feel expensive.",
-backgroundImage: null,
-backgroundBrightness: 0.45,
-heroSectionBackgroundImage: null,
-heroSectionOverlay: 0.58,
-servicesTitle: "Everything the site should sell",
-servicesSubtitle:
-"Keep the homepage premium with strong service blocks, direct action buttons, and clear customer paths.",
-portfolioTitle: "Selected work",
-portfolioSubtitle:
-"This page is the gallery preview. The full portfolio lives on its own page, and each category can hold as many images as you want.",
-reviewsTitle: "What clients say",
-reviewsSubtitle:
-"Show real reviews on the page and let customers upload photos with them.",
-aboutTitle: "A contractor brand built to feel premium.",
-aboutSubtitle:
-"Murillo Renovations LLC handles remodeling, repairs, custom projects, and high-impact home improvements with a clean process from start to finish.",
-faqTitle: "Common questions",
-faqSubtitle: "Keep answers short, useful, and easy to scan.",
-quickTitle: "Quick actions",
-quickSubtitle:
-"The homepage should always keep a customer one click away from the next step.",
-contactTitle: "Contact",
-contactSubtitle: "Keep the call, visit, payment, and portfolio paths obvious.",
-stat1: "100+",
-stat2: "5★",
-stat3: "Fast response",
-portfolio: {
-"Kitchen Remodel": [],
-"Bathroom Remodel": [],
-"Flooring Project": [],
-"Custom Build": [],
-"Repair Work": [],
-Renovation: [],
-},
-reviews: [],
-visits: [],
-payments: [],
-};
-
 function uid() {
 return `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function openDb(): Promise<IDBDatabase> {
-return new Promise((resolve, reject) => {
-const request = indexedDB.open(DB_NAME, 1);
-
-request.onupgradeneeded = () => {
-const db = request.result;
-if (!db.objectStoreNames.contains(STORE_NAME)) {
-db.createObjectStore(STORE_NAME);
-}
-};
-
-request.onsuccess = () => resolve(request.result);
-request.onerror = () => reject(request.error);
-});
+function mediaUrl(item?: MediaItem | null) {
+if (!item) return "";
+return item.url || item.src || "";
 }
 
 function toMediaItem(value: unknown): MediaItem | null {
-if (!value || typeof value !== "object") return null;
+if (!value) return null;
 
-const item = value as Record<string, unknown>;
-if (typeof item.id !== "string") return null;
+if (typeof value === "string") {
+return {
+id: uid(),
+url: value,
+src: value,
+alt: "image",
+name: "image",
+createdAt: new Date().toISOString(),
+};
+}
 
-const out: MediaItem = { id: item.id };
+if (typeof value !== "object") return null;
 
-if (typeof item.name === "string") out.name = item.name;
-if (item.file instanceof File) out.file = item.file;
-if (typeof item.src === "string") out.src = item.src;
+const raw = value as Record<string, unknown>;
 
-return out;
+const url =
+typeof raw.url === "string"
+? raw.url
+: typeof raw.src === "string"
+? raw.src
+: "";
+
+if (!url && typeof raw.id !== "string") return null;
+
+return {
+id: typeof raw.id === "string" ? raw.id : uid(),
+url,
+src: typeof raw.src === "string" ? raw.src : url,
+pathname: typeof raw.pathname === "string" ? raw.pathname : "",
+alt:
+typeof raw.alt === "string"
+? raw.alt
+: typeof raw.name === "string"
+? raw.name
+: "image",
+name:
+typeof raw.name === "string"
+? raw.name
+: typeof raw.alt === "string"
+? raw.alt
+: "image",
+createdAt:
+typeof raw.createdAt === "string" ? raw.createdAt : new Date().toISOString(),
+};
 }
 
 function normalizeMediaArray(value: unknown): MediaItem[] {
@@ -242,73 +289,59 @@ return value.map(toMediaItem).filter((item): item is MediaItem => Boolean(item))
 function normalizeReview(value: unknown): ReviewItem | null {
 if (!value || typeof value !== "object") return null;
 
-const item = value as Record<string, unknown>;
-if (typeof item.id !== "string") return null;
+const raw = value as Record<string, unknown>;
 
 return {
-id: item.id,
-name: typeof item.name === "string" ? item.name : "",
-rating: Number(item.rating) || 5,
-text: typeof item.text === "string" ? item.text : "",
-photos: normalizeMediaArray(item.photos),
-date: typeof item.date === "string" ? item.date : new Date().toLocaleString(),
+id: typeof raw.id === "string" ? raw.id : uid(),
+name: typeof raw.name === "string" ? raw.name : "",
+rating:
+typeof raw.rating === "number"
+? Math.max(1, Math.min(5, raw.rating))
+: Number(raw.rating) || 5,
+text: typeof raw.text === "string" ? raw.text : "",
+photos: normalizeMediaArray(raw.photos),
+date: typeof raw.date === "string" ? raw.date : new Date().toLocaleString(),
 };
 }
 
 function normalizeVisit(value: unknown): VisitItem | null {
 if (!value || typeof value !== "object") return null;
 
-const item = value as Record<string, unknown>;
-if (typeof item.id !== "string") return null;
+const raw = value as Record<string, unknown>;
 
 return {
-id: item.id,
-name: typeof item.name === "string" ? item.name : "",
-email: typeof item.email === "string" ? item.email : "",
-phone: typeof item.phone === "string" ? item.phone : "",
-address: typeof item.address === "string" ? item.address : "",
-jobType: typeof item.jobType === "string" ? item.jobType : "",
-preferredTime: typeof item.preferredTime === "string" ? item.preferredTime : "",
-details: typeof item.details === "string" ? item.details : "",
-date: typeof item.date === "string" ? item.date : new Date().toLocaleString(),
+id: typeof raw.id === "string" ? raw.id : uid(),
+name: typeof raw.name === "string" ? raw.name : "",
+email: typeof raw.email === "string" ? raw.email : "",
+phone: typeof raw.phone === "string" ? raw.phone : "",
+address: typeof raw.address === "string" ? raw.address : "",
+jobType: typeof raw.jobType === "string" ? raw.jobType : "",
+preferredTime: typeof raw.preferredTime === "string" ? raw.preferredTime : "",
+details: typeof raw.details === "string" ? raw.details : "",
+date: typeof raw.date === "string" ? raw.date : new Date().toLocaleString(),
 };
 }
 
 function normalizePayment(value: unknown): PaymentItem | null {
 if (!value || typeof value !== "object") return null;
 
-const item = value as Record<string, unknown>;
-if (typeof item.id !== "string") return null;
+const raw = value as Record<string, unknown>;
 
 return {
-id: item.id,
-amount: typeof item.amount === "string" ? item.amount : "",
-name: typeof item.name === "string" ? item.name : "",
-email: typeof item.email === "string" ? item.email : "",
-notes: typeof item.notes === "string" ? item.notes : "",
-proofs: normalizeMediaArray(item.proofs),
-date: typeof item.date === "string" ? item.date : new Date().toLocaleString(),
+id: typeof raw.id === "string" ? raw.id : uid(),
+amount: typeof raw.amount === "string" ? raw.amount : "",
+name: typeof raw.name === "string" ? raw.name : "",
+email: typeof raw.email === "string" ? raw.email : "",
+notes: typeof raw.notes === "string" ? raw.notes : "",
+proofs: normalizeMediaArray(raw.proofs),
+date: typeof raw.date === "string" ? raw.date : new Date().toLocaleString(),
 };
 }
 
-async function loadState(): Promise<SiteData> {
-if (typeof window === "undefined") return defaultData;
+function normalizeSiteData(input: unknown): SiteData {
+if (!input || typeof input !== "object") return DEFAULT_SITE_DATA;
 
-try {
-const db = await openDb();
-
-return await new Promise<SiteData>((resolve) => {
-const tx = db.transaction(STORE_NAME, "readonly");
-const store = tx.objectStore(STORE_NAME);
-const request = store.get(STORE_KEY);
-
-request.onsuccess = () => {
-const value = request.result as Partial<SiteData> | undefined;
-
-if (!value) {
-resolve(defaultData);
-return;
-}
+const raw = input as Partial<SiteData>;
 
 const portfolio: Record<Category, MediaItem[]> = {
 "Kitchen Remodel": [],
@@ -319,106 +352,121 @@ const portfolio: Record<Category, MediaItem[]> = {
 Renovation: [],
 };
 
-for (const category of categories) {
-portfolio[category] = normalizeMediaArray(value.portfolio?.[category]);
+for (const category of CATEGORIES) {
+portfolio[category] = normalizeMediaArray(raw.portfolio?.[category]);
 }
 
-resolve({
-...defaultData,
-...value,
-backgroundImage: toMediaItem(value.backgroundImage) || null,
-heroSectionBackgroundImage: toMediaItem(value.heroSectionBackgroundImage) || null,
-portfolio,
-reviews: Array.isArray(value.reviews)
-? value.reviews.map(normalizeReview).filter((item): item is ReviewItem => Boolean(item))
-: [],
-visits: Array.isArray(value.visits)
-? value.visits.map(normalizeVisit).filter((item): item is VisitItem => Boolean(item))
-: [],
-payments: Array.isArray(value.payments)
-? value.payments.map(normalizePayment).filter((item): item is PaymentItem => Boolean(item))
-: [],
-});
-};
+const phoneFromData =
+typeof raw.phoneNumber === "string" && raw.phoneNumber.trim()
+? raw.phoneNumber.trim()
+: DEFAULT_PHONE;
 
-request.onerror = () => resolve(defaultData);
-});
-} catch {
-return defaultData;
-}
-}
-
-async function saveState(data: SiteData): Promise<void> {
-if (typeof window === "undefined") return;
-
-const db = await openDb();
-
-await new Promise<void>((resolve, reject) => {
-const tx = db.transaction(STORE_NAME, "readwrite");
-const store = tx.objectStore(STORE_NAME);
-const request = store.put(data, STORE_KEY);
-
-request.onsuccess = () => resolve();
-request.onerror = () => reject(request.error);
-});
-}
-
-function fileToMediaItem(file: File): MediaItem {
 return {
-id: uid(),
-name: file.name,
-file,
+...DEFAULT_SITE_DATA,
+...raw,
+
+phoneNumber:
+phoneFromData.includes("678") || phoneFromData.includes("555")
+? DEFAULT_PHONE
+: phoneFromData,
+
+backgroundImage: toMediaItem(raw.backgroundImage) || null,
+backgroundBrightness:
+typeof raw.backgroundBrightness === "number"
+? raw.backgroundBrightness
+: DEFAULT_SITE_DATA.backgroundBrightness,
+
+heroSectionBackgroundImage: toMediaItem(raw.heroSectionBackgroundImage) || null,
+heroSectionOverlay:
+typeof raw.heroSectionOverlay === "number"
+? raw.heroSectionOverlay
+: DEFAULT_SITE_DATA.heroSectionOverlay,
+
+portfolio,
+
+reviews: Array.isArray(raw.reviews)
+? raw.reviews.map(normalizeReview).filter((item): item is ReviewItem => Boolean(item))
+: [],
+
+visits: Array.isArray(raw.visits)
+? raw.visits.map(normalizeVisit).filter((item): item is VisitItem => Boolean(item))
+: [],
+
+payments: Array.isArray(raw.payments)
+? raw.payments.map(normalizePayment).filter((item): item is PaymentItem => Boolean(item))
+: [],
 };
 }
 
-async function filesToMedia(files: FileList | null): Promise<MediaItem[]> {
+async function loadSiteData(): Promise<SiteData> {
+try {
+const res = await fetch("/api/site-data", {
+cache: "no-store",
+});
+
+if (!res.ok) throw new Error("Failed to load site data.");
+
+const json = await res.json();
+return normalizeSiteData(json?.data ?? json);
+} catch (error) {
+console.error("Homepage site-data load failed:", error);
+return DEFAULT_SITE_DATA;
+}
+}
+
+async function saveSiteData(data: SiteData): Promise<void> {
+const res = await fetch("/api/site-data", {
+method: "POST",
+headers: {
+"Content-Type": "application/json",
+},
+body: JSON.stringify({ data }),
+});
+
+if (!res.ok) {
+const json = await res.json().catch(() => ({}));
+throw new Error(json?.error || "Failed to save site data.");
+}
+}
+
+async function uploadFiles(files: FileList | null, folder: string): Promise<MediaItem[]> {
 if (!files?.length) return [];
-return Array.from(files).map(fileToMediaItem);
+
+const uploaded: MediaItem[] = [];
+
+for (const file of Array.from(files)) {
+const formData = new FormData();
+formData.append("file", file);
+formData.append("folder", folder);
+
+const res = await fetch("/api/blob/upload", {
+method: "POST",
+body: formData,
+});
+
+const json = await res.json().catch(() => ({}));
+
+if (!res.ok || !json?.url) {
+throw new Error(json?.error || `Upload failed for ${file.name}`);
 }
 
-function useMediaUrl(item?: MediaItem | null) {
-const [url, setUrl] = useState("");
-
-useEffect(() => {
-if (!item) {
-setUrl("");
-return;
+uploaded.push({
+id: uid(),
+url: String(json.url),
+src: String(json.url),
+pathname: String(json.pathname || json.url),
+alt: file.name,
+name: file.name,
+createdAt: new Date().toISOString(),
+});
 }
 
-if (item.src) {
-setUrl(item.src);
-return;
+return uploaded;
 }
 
-if (!item.file) {
-setUrl("");
-return;
-}
-
-const objectUrl = URL.createObjectURL(item.file);
-setUrl(objectUrl);
-
-return () => {
-URL.revokeObjectURL(objectUrl);
-};
-}, [item?.id, item?.src, item?.file]);
-
-return url;
-}
-
-function MediaImage({
-item,
-alt,
-className = "",
-}: {
-item: MediaItem;
-alt?: string;
-className?: string;
-}) {
-const url = useMediaUrl(item);
-if (!url) return null;
-
-return <img src={url} alt={alt || item.name || "image"} className={className} draggable={false} />;
+function phoneHref(phone: string) {
+const clean = phone.replace(/[^\d+]/g, "");
+return `tel:${clean}`;
 }
 
 function GlassCard({
@@ -457,18 +505,25 @@ return (
 );
 }
 
-function StatPill({
-value,
-label,
+function MediaImage({
+item,
+className = "",
+alt,
 }: {
-value: string;
-label: string;
+item: MediaItem;
+className?: string;
+alt?: string;
 }) {
+const src = mediaUrl(item);
+if (!src) return null;
+
 return (
-<GlassCard className="p-5">
-<p className="text-3xl font-black text-blue-400">{value}</p>
-<p className="mt-1 text-sm text-white/60">{label}</p>
-</GlassCard>
+<img
+src={src}
+alt={alt || item.alt || item.name || "image"}
+className={className}
+draggable={false}
+/>
 );
 }
 
@@ -476,8 +531,17 @@ function StarRow({ rating }: { rating: number }) {
 const value = Math.max(0, Math.min(5, rating));
 return (
 <span className="text-cyan-300">
-{Array.from({ length: 5 }, (_, i) => (i < value ? "★" : "☆")).join("")}
+{Array.from({ length: 5 }, (_, index) => (index < value ? "★" : "☆")).join("")}
 </span>
+);
+}
+
+function StatPill({ value, label }: { value: string; label: string }) {
+return (
+<GlassCard className="p-5">
+<p className="text-3xl font-black text-blue-400">{value}</p>
+<p className="mt-1 text-sm text-white/60">{label}</p>
+</GlassCard>
 );
 }
 
@@ -498,9 +562,7 @@ return (
 <div className="fixed inset-0 z-[90] overflow-y-auto bg-black/85 p-4">
 <div className="mx-auto mt-10 max-w-4xl rounded-[2rem] border border-white/10 bg-[#050505] p-6 shadow-2xl">
 <div className="flex items-start justify-between gap-3">
-<div>
 <p className="text-xs uppercase tracking-[0.35em] text-white/45">{title}</p>
-</div>
 <button
 type="button"
 onClick={onClose}
@@ -509,6 +571,7 @@ className="rounded-full border border-white/10 px-4 py-2 text-xs font-semibold t
 Close
 </button>
 </div>
+
 {children}
 </div>
 </div>
@@ -518,7 +581,7 @@ Close
 export default function HomePage() {
 const router = useRouter();
 
-const [site, setSite] = useState<SiteData>(defaultData);
+const [site, setSite] = useState<SiteData>(DEFAULT_SITE_DATA);
 const [ready, setReady] = useState(false);
 
 const [showVisit, setShowVisit] = useState(false);
@@ -565,14 +628,14 @@ const reviewsRef = useRef<HTMLDivElement | null>(null);
 useEffect(() => {
 let mounted = true;
 
-loadState().then((loaded) => {
+loadSiteData().then((loaded) => {
 if (!mounted) return;
 setSite(loaded);
 setReady(true);
 });
 
-const views = Number(localStorage.getItem("murillo_views") || "0") + 1;
-localStorage.setItem("murillo_views", String(views));
+const views = Number(window.localStorage.getItem("murillo_views") || "0") + 1;
+window.localStorage.setItem("murillo_views", String(views));
 setSiteViews(views);
 
 return () => {
@@ -580,9 +643,9 @@ mounted = false;
 };
 }, []);
 
-const pageBackgroundUrl = useMediaUrl(site.backgroundImage);
-const heroSectionBackgroundUrl = useMediaUrl(site.heroSectionBackgroundImage);
-const selectedImageUrl = useMediaUrl(selectedImage);
+const pageBackgroundUrl = mediaUrl(site.backgroundImage);
+const heroSectionBackgroundUrl = mediaUrl(site.heroSectionBackgroundImage);
+const selectedImageUrl = mediaUrl(selectedImage);
 
 const heroPreviewImages = useMemo(() => {
 const ordered = [
@@ -593,7 +656,8 @@ const ordered = [
 ...site.portfolio["Flooring Project"],
 ...site.portfolio["Repair Work"],
 ];
-return ordered.slice(0, 2);
+
+return ordered.filter((item) => mediaUrl(item)).slice(0, 2);
 }, [site.portfolio]);
 
 const previewCards = useMemo(
@@ -651,15 +715,27 @@ background:
 };
 
 const uploadReviewPhotos = async (files: FileList | null) => {
-const media = await filesToMedia(files);
+setReviewStatus("");
+
+try {
+const media = await uploadFiles(files, "review-photos");
 if (!media.length) return;
 setReviewPhotos((prev) => [...prev, ...media]);
+} catch {
+setReviewStatus("Could not upload review photos.");
+}
 };
 
 const uploadPaymentProofs = async (files: FileList | null) => {
-const media = await filesToMedia(files);
+setPaymentStatus("");
+
+try {
+const media = await uploadFiles(files, "payment-proofs");
 if (!media.length) return;
 setPaymentProofs((prev) => [...prev, ...media]);
+} catch {
+setPaymentStatus("Could not upload payment screenshot.");
+}
 };
 
 const submitVisit = async () => {
@@ -684,13 +760,13 @@ details: visitForm.details.trim(),
 date: new Date().toLocaleString(),
 };
 
-const next = {
+const nextSite: SiteData = {
 ...site,
 visits: [payload, ...site.visits],
 };
 
-setSite(next);
-await saveState(next);
+setSite(nextSite);
+await saveSiteData(nextSite);
 
 try {
 await fetch("/api/visit", {
@@ -699,7 +775,7 @@ headers: { "Content-Type": "application/json" },
 body: JSON.stringify(payload),
 });
 } catch {
-// ignore missing api route
+// Visit still saves globally even if SMS route is not configured.
 }
 
 setVisitForm({
@@ -740,13 +816,13 @@ proofs: paymentProofs,
 date: new Date().toLocaleString(),
 };
 
-const next = {
+const nextSite: SiteData = {
 ...site,
 payments: [payload, ...site.payments],
 };
 
-setSite(next);
-await saveState(next);
+setSite(nextSite);
+await saveSiteData(nextSite);
 
 setPaymentForm({
 amount: "",
@@ -782,13 +858,13 @@ photos: reviewPhotos,
 date: new Date().toLocaleString(),
 };
 
-const next = {
+const nextSite: SiteData = {
 ...site,
 reviews: [payload, ...site.reviews],
 };
 
-setSite(next);
-await saveState(next);
+setSite(nextSite);
+await saveSiteData(nextSite);
 
 setReviewForm({
 name: "",
@@ -832,7 +908,10 @@ background:
 <div
 className="pointer-events-none fixed inset-0 -z-10"
 style={{
-background: `rgba(0,0,0,${Math.max(0.08, Math.min(0.82, site.backgroundBrightness))})`,
+background: `rgba(0,0,0,${Math.max(
+0.08,
+Math.min(0.82, site.backgroundBrightness)
+)})`,
 }}
 />
 
@@ -857,7 +936,9 @@ View Portfolio
 </button>
 <button
 type="button"
-onClick={() => reviewsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+onClick={() =>
+reviewsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+}
 className="text-white/75 transition hover:text-white"
 >
 Reviews
@@ -876,7 +957,7 @@ className="rounded-full border border-white/15 px-4 py-2 text-white/80 transitio
 >
 Make Payment
 </button>
-<a href={`tel:${site.phoneNumber}`}>
+<a href={phoneHref(site.phoneNumber)}>
 <button type="button" className="rounded-full bg-white px-4 py-2 font-semibold text-black">
 Call Now
 </button>
@@ -894,7 +975,9 @@ Portfolio
 </button>
 <button
 type="button"
-onClick={() => reviewsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+onClick={() =>
+reviewsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+}
 className="rounded-full border border-white/10 px-3 py-2 text-xs font-semibold text-white/80"
 >
 Reviews
@@ -913,7 +996,7 @@ className="rounded-full border border-white/10 px-3 py-2 text-xs font-semibold t
 >
 Payment
 </button>
-<a href={`tel:${site.phoneNumber}`}>
+<a href={phoneHref(site.phoneNumber)}>
 <button type="button" className="rounded-full bg-white px-3 py-2 text-xs font-semibold text-black">
 Call
 </button>
@@ -935,9 +1018,13 @@ background:
 <div
 className="absolute inset-0"
 style={{
-background: `rgba(0,0,0,${Math.max(0.2, Math.min(0.88, site.heroSectionOverlay))})`,
+background: `rgba(0,0,0,${Math.max(
+0.2,
+Math.min(0.88, site.heroSectionOverlay)
+)})`,
 }}
 />
+
 <div className="mx-auto grid min-h-[100vh] max-w-7xl gap-6 px-4 py-8 md:px-8 md:py-10 lg:grid-cols-[1.08fr_.92fr] lg:items-center">
 <div className="relative z-10">
 <GlassCard className="relative overflow-hidden p-6 md:p-10">
@@ -948,6 +1035,7 @@ background:
 "radial-gradient(circle at top left, rgba(59,130,246,0.20), transparent 34%), radial-gradient(circle at bottom right, rgba(34,197,94,0.12), transparent 30%)",
 }}
 />
+
 <div className="relative">
 <p className="text-[11px] uppercase tracking-[0.35em] text-white/45 md:text-xs">
 {site.heroBadge}
@@ -1000,7 +1088,9 @@ Make Payment
 <GlassCard className="overflow-hidden p-5 md:p-6">
 <div className="grid gap-4 lg:grid-cols-[1fr_0.9fr]">
 <div>
-<p className="text-[11px] uppercase tracking-[0.35em] text-white/45 md:text-xs">Start Here</p>
+<p className="text-[11px] uppercase tracking-[0.35em] text-white/45 md:text-xs">
+Start Here
+</p>
 <h2 className="mt-3 text-3xl font-black leading-tight md:text-4xl">
 Quote, visit, or pay in one place.
 </h2>
@@ -1061,7 +1151,9 @@ Strong portfolio preview
 <GlassCard className="p-5">
 <div className="grid gap-4 sm:grid-cols-2">
 <div className="rounded-[1.4rem] border border-white/10 bg-white/5 p-5">
-<p className="text-xs uppercase tracking-[0.3em] text-white/45">Portfolio preview</p>
+<p className="text-xs uppercase tracking-[0.3em] text-white/45">
+Portfolio preview
+</p>
 <p className="mt-3 text-2xl font-bold">Selected work only.</p>
 <p className="mt-3 text-sm text-white/65">
 The gallery lives on its own page so the homepage stays clean and premium.
@@ -1070,9 +1162,15 @@ The gallery lives on its own page so the homepage stays clean and premium.
 
 <div className="rounded-[1.4rem] border border-white/10 bg-white/5 p-5">
 <p className="text-xs uppercase tracking-[0.3em] text-white/45">Action flow</p>
-<p className="mt-3 text-sm text-white/70">Click top buttons for visit or payment.</p>
-<p className="mt-2 text-sm text-white/70">Click portfolio to go to the gallery page.</p>
-<p className="mt-2 text-sm text-white/70">Add reviews with photos on the site.</p>
+<p className="mt-3 text-sm text-white/70">
+Click top buttons for visit or payment.
+</p>
+<p className="mt-2 text-sm text-white/70">
+Click portfolio to go to the gallery page.
+</p>
+<p className="mt-2 text-sm text-white/70">
+Add reviews with photos on the site.
+</p>
 </div>
 </div>
 </GlassCard>
@@ -1085,7 +1183,9 @@ The gallery lives on its own page so the homepage stays clean and premium.
 <div className="overflow-hidden rounded-[2.2rem] border border-black/10 bg-gradient-to-r from-emerald-400 via-green-400 to-lime-300 px-8 py-14 text-black shadow-[0_20px_80px_rgba(20,255,130,0.12)]">
 <div className="flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
 <div className="max-w-3xl">
-<p className="text-xs uppercase tracking-[0.35em] text-black/60">Ready to start</p>
+<p className="text-xs uppercase tracking-[0.35em] text-black/60">
+Ready to start
+</p>
 <h2 className="mt-3 text-4xl font-black leading-[0.95] md:text-6xl">
 Book a visit, get a quote, or make a payment.
 </h2>
@@ -1158,7 +1258,7 @@ View Portfolio
 
 <div className="mt-10 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
 {previewCards.map((card) => {
-const image = site.portfolio[card.title][0] || null;
+const image = site.portfolio[card.title].find((item) => mediaUrl(item));
 
 return (
 <GlassCard key={card.title} className="overflow-hidden">
@@ -1170,14 +1270,20 @@ background:
 }}
 >
 {image ? (
-<button type="button" onClick={() => setSelectedImage(image)} className="block h-full w-full">
+<button
+type="button"
+onClick={() => setSelectedImage(image)}
+className="block h-full w-full"
+>
 <MediaImage item={image} className="h-56 w-full object-cover" />
 </button>
 ) : null}
 </div>
 
 <div className="p-6">
-<p className="text-xs uppercase tracking-[0.3em] text-white/45">Portfolio preview</p>
+<p className="text-xs uppercase tracking-[0.3em] text-white/45">
+Portfolio preview
+</p>
 <h3 className="mt-3 text-2xl font-bold">{card.title}</h3>
 <p className="mt-3 text-sm leading-7 text-white/65">{card.text}</p>
 
@@ -1253,13 +1359,13 @@ className="overflow-hidden rounded-2xl border border-white/10"
 <div className="mt-6 grid gap-4 md:grid-cols-2">
 <input
 value={reviewForm.name}
-onChange={(e) => setReviewForm({ ...reviewForm, name: e.target.value })}
+onChange={(event) => setReviewForm({ ...reviewForm, name: event.target.value })}
 className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none"
 placeholder="Your name"
 />
 <select
 value={reviewForm.rating}
-onChange={(e) => setReviewForm({ ...reviewForm, rating: e.target.value })}
+onChange={(event) => setReviewForm({ ...reviewForm, rating: event.target.value })}
 className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none"
 >
 <option value="5">5 stars</option>
@@ -1272,7 +1378,7 @@ className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none"
 
 <textarea
 value={reviewForm.text}
-onChange={(e) => setReviewForm({ ...reviewForm, text: e.target.value })}
+onChange={(event) => setReviewForm({ ...reviewForm, text: event.target.value })}
 className="mt-4 min-h-32 w-full rounded-2xl border border-white/10 bg-black/40 p-4 outline-none"
 placeholder="Write your review..."
 />
@@ -1285,7 +1391,7 @@ type="file"
 multiple
 accept="image/*"
 className="hidden"
-onChange={(e) => uploadReviewPhotos(e.target.files)}
+onChange={(event) => uploadReviewPhotos(event.target.files)}
 />
 </label>
 
@@ -1454,31 +1560,31 @@ Fill this out so we can come check the job and schedule the next step.
 <div className="mt-6 grid gap-4 md:grid-cols-2">
 <input
 value={visitForm.name}
-onChange={(e) => setVisitForm({ ...visitForm, name: e.target.value })}
+onChange={(event) => setVisitForm({ ...visitForm, name: event.target.value })}
 className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none"
 placeholder="Full name"
 />
 <input
 value={visitForm.email}
-onChange={(e) => setVisitForm({ ...visitForm, email: e.target.value })}
+onChange={(event) => setVisitForm({ ...visitForm, email: event.target.value })}
 className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none"
 placeholder="Email"
 />
 <input
 value={visitForm.phone}
-onChange={(e) => setVisitForm({ ...visitForm, phone: e.target.value })}
+onChange={(event) => setVisitForm({ ...visitForm, phone: event.target.value })}
 className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none"
 placeholder="Phone number"
 />
 <input
 value={visitForm.address}
-onChange={(e) => setVisitForm({ ...visitForm, address: e.target.value })}
+onChange={(event) => setVisitForm({ ...visitForm, address: event.target.value })}
 className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none"
 placeholder="Project address"
 />
 <select
 value={visitForm.jobType}
-onChange={(e) => setVisitForm({ ...visitForm, jobType: e.target.value })}
+onChange={(event) => setVisitForm({ ...visitForm, jobType: event.target.value })}
 className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none"
 >
 <option value="">Job type</option>
@@ -1490,7 +1596,7 @@ className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none"
 </select>
 <input
 value={visitForm.preferredTime}
-onChange={(e) => setVisitForm({ ...visitForm, preferredTime: e.target.value })}
+onChange={(event) => setVisitForm({ ...visitForm, preferredTime: event.target.value })}
 className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none"
 placeholder="Preferred day / time"
 />
@@ -1498,7 +1604,7 @@ placeholder="Preferred day / time"
 
 <textarea
 value={visitForm.details}
-onChange={(e) => setVisitForm({ ...visitForm, details: e.target.value })}
+onChange={(event) => setVisitForm({ ...visitForm, details: event.target.value })}
 className="mt-4 min-h-32 w-full rounded-2xl border border-white/10 bg-black/40 p-4 outline-none"
 placeholder="Tell us what you need done..."
 />
@@ -1519,7 +1625,7 @@ className="rounded-full border border-white/15 px-6 py-3 font-semibold text-whit
 >
 View Portfolio
 </button>
-<a href={`tel:${site.phoneNumber}`}>
+<a href={phoneHref(site.phoneNumber)}>
 <button
 type="button"
 className="rounded-full border border-white/15 px-6 py-3 font-semibold text-white"
@@ -1564,19 +1670,19 @@ Upload your payment screenshot and submit it for review.
 <div className="mt-6 grid gap-4 md:grid-cols-2">
 <input
 value={paymentForm.amount}
-onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
+onChange={(event) => setPaymentForm({ ...paymentForm, amount: event.target.value })}
 className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none"
 placeholder="Amount owed"
 />
 <input
 value={paymentForm.name}
-onChange={(e) => setPaymentForm({ ...paymentForm, name: e.target.value })}
+onChange={(event) => setPaymentForm({ ...paymentForm, name: event.target.value })}
 className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none"
 placeholder="Your name"
 />
 <input
 value={paymentForm.email}
-onChange={(e) => setPaymentForm({ ...paymentForm, email: e.target.value })}
+onChange={(event) => setPaymentForm({ ...paymentForm, email: event.target.value })}
 className="rounded-2xl border border-white/10 bg-black/40 p-4 outline-none md:col-span-2"
 placeholder="Your email"
 />
@@ -1584,7 +1690,7 @@ placeholder="Your email"
 
 <textarea
 value={paymentForm.notes}
-onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })}
+onChange={(event) => setPaymentForm({ ...paymentForm, notes: event.target.value })}
 className="mt-4 min-h-28 w-full rounded-2xl border border-white/10 bg-black/40 p-4 outline-none"
 placeholder="Extra notes for the payment review"
 />
@@ -1597,7 +1703,7 @@ type="file"
 multiple
 accept="image/*"
 className="hidden"
-onChange={(e) => uploadPaymentProofs(e.target.files)}
+onChange={(event) => uploadPaymentProofs(event.target.files)}
 />
 </label>
 
@@ -1650,13 +1756,13 @@ className="fixed inset-0 z-[100] flex items-center justify-center bg-black/92 p-
 >
 <img
 src={selectedImageUrl}
-alt={selectedImage.name || "selected"}
+alt={selectedImage.alt || selectedImage.name || "selected"}
 className="max-h-[92vh] max-w-[95vw] rounded-3xl shadow-2xl"
 />
 </button>
 )}
 
-<a href={`tel:${site.phoneNumber}`}>
+<a href={phoneHref(site.phoneNumber)}>
 <div className="fixed bottom-6 right-6 z-40 rounded-full bg-white px-5 py-3 font-semibold text-black shadow-xl">
 📞 Call
 </div>

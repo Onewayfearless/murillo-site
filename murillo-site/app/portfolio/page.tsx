@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
 type Category =
@@ -13,9 +13,12 @@ type Category =
 
 type MediaItem = {
 id: string;
-name?: string;
-file?: File | null;
+url?: string;
 src?: string;
+pathname?: string;
+alt?: string;
+name?: string;
+createdAt?: string;
 };
 
 type ReviewItem = {
@@ -53,43 +56,51 @@ type SiteData = {
 businessName: string;
 phoneNumber: string;
 zelleContact: string;
+
 heroBadge: string;
 heroTitleLine1: string;
 heroTitleLine2: string;
 heroAccent: string;
 heroSubtitle: string;
+
 backgroundImage: MediaItem | null;
 backgroundBrightness: number;
+
 heroSectionBackgroundImage: MediaItem | null;
 heroSectionOverlay: number;
+
 servicesTitle: string;
 servicesSubtitle: string;
+
 portfolioTitle: string;
 portfolioSubtitle: string;
+
 reviewsTitle: string;
 reviewsSubtitle: string;
+
 aboutTitle: string;
 aboutSubtitle: string;
+
 faqTitle: string;
 faqSubtitle: string;
+
 quickTitle: string;
 quickSubtitle: string;
+
 contactTitle: string;
 contactSubtitle: string;
+
 stat1: string;
 stat2: string;
 stat3: string;
+
 portfolio: Record<Category, MediaItem[]>;
 reviews: ReviewItem[];
 visits: VisitItem[];
 payments: PaymentItem[];
 };
 
-const DB_NAME = "MURILLO_SITE_DB";
-const STORE_NAME = "site";
-const STORE_KEY = "state";
-
-const categories: Category[] = [
+const CATEGORIES: Category[] = [
 "Kitchen Remodel",
 "Bathroom Remodel",
 "Flooring Project",
@@ -98,42 +109,54 @@ const categories: Category[] = [
 "Renovation",
 ];
 
-const defaultData: SiteData = {
+const DEFAULT_PHONE = "404-389-3672";
+
+const DEFAULT_SITE_DATA: SiteData = {
 businessName: "Murillo Renovations LLC",
-phoneNumber: "+1 (678) 555-1234",
+phoneNumber: DEFAULT_PHONE,
 zelleContact: "your-zelle@email.com",
+
 heroBadge: "Licensed & Insured General Contractor",
 heroTitleLine1: "Luxury Homes",
 heroTitleLine2: "Done Once.",
 heroAccent: "Done Once.",
 heroSubtitle:
 "Premium remodeling, renovation, and custom construction with a clean process, strong communication, and results that feel expensive.",
+
 backgroundImage: null,
 backgroundBrightness: 0.45,
+
 heroSectionBackgroundImage: null,
 heroSectionOverlay: 0.58,
+
 servicesTitle: "Everything the site should sell",
 servicesSubtitle:
 "Keep the homepage premium with strong service blocks, direct action buttons, and clear customer paths.",
+
 portfolioTitle: "Selected work",
 portfolioSubtitle:
 "This page is the gallery preview. The full portfolio lives on its own page, and each category can hold as many images as you want.",
+
 reviewsTitle: "What clients say",
-reviewsSubtitle:
-"Show real reviews on the page and let customers upload photos with them.",
+reviewsSubtitle: "Show real reviews on the page and let customers upload photos with them.",
+
 aboutTitle: "A contractor brand built to feel premium.",
 aboutSubtitle:
 "Murillo Renovations LLC handles remodeling, repairs, custom projects, and high-impact home improvements with a clean process from start to finish.",
+
 faqTitle: "Common questions",
 faqSubtitle: "Keep answers short, useful, and easy to scan.",
+
 quickTitle: "Quick actions",
-quickSubtitle:
-"The homepage should always keep a customer one click away from the next step.",
+quickSubtitle: "The homepage should always keep a customer one click away from the next step.",
+
 contactTitle: "Contact",
 contactSubtitle: "Keep the call, visit, payment, and portfolio paths obvious.",
+
 stat1: "100+",
 stat2: "5★",
 stat3: "Fast response",
+
 portfolio: {
 "Kitchen Remodel": [],
 "Bathroom Remodel": [],
@@ -142,6 +165,7 @@ portfolio: {
 "Repair Work": [],
 Renovation: [],
 },
+
 reviews: [],
 visits: [],
 payments: [],
@@ -151,62 +175,121 @@ function uid() {
 return `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function openDb(): Promise<IDBDatabase> {
-return new Promise((resolve, reject) => {
-const request = indexedDB.open(DB_NAME, 1);
-
-request.onupgradeneeded = () => {
-const db = request.result;
-if (!db.objectStoreNames.contains(STORE_NAME)) {
-db.createObjectStore(STORE_NAME);
-}
-};
-
-request.onsuccess = () => resolve(request.result);
-request.onerror = () => reject(request.error);
-});
+function mediaUrl(item?: MediaItem | null) {
+if (!item) return "";
+return item.url || item.src || "";
 }
 
-function parseJson(raw: string | null) {
-if (!raw) return null;
-try {
-return JSON.parse(raw);
-} catch {
-return null;
-}
-}
-
-function mediaFromUnknown(value: unknown): MediaItem | null {
+function toMediaItem(value: unknown): MediaItem | null {
 if (!value) return null;
 
 if (typeof value === "string") {
-return { id: uid(), src: value };
-}
-
-if (typeof value === "object") {
-const item = value as Record<string, unknown>;
-const fileValue = item.file;
-
-const out: MediaItem = {
-id: typeof item.id === "string" ? item.id : uid(),
-name: typeof item.name === "string" ? item.name : undefined,
-src: typeof item.src === "string" ? item.src : undefined,
-file: fileValue instanceof File ? fileValue : undefined,
+return {
+id: uid(),
+url: value,
+src: value,
+alt: "image",
+name: "image",
+createdAt: new Date().toISOString(),
 };
-
-if (out.src || out.file) return out;
 }
 
-return null;
+if (typeof value !== "object") return null;
+
+const raw = value as Record<string, unknown>;
+
+const url =
+typeof raw.url === "string"
+? raw.url
+: typeof raw.src === "string"
+? raw.src
+: "";
+
+if (!url && typeof raw.id !== "string") return null;
+
+return {
+id: typeof raw.id === "string" ? raw.id : uid(),
+url,
+src: typeof raw.src === "string" ? raw.src : url,
+pathname: typeof raw.pathname === "string" ? raw.pathname : "",
+alt:
+typeof raw.alt === "string"
+? raw.alt
+: typeof raw.name === "string"
+? raw.name
+: "image",
+name:
+typeof raw.name === "string"
+? raw.name
+: typeof raw.alt === "string"
+? raw.alt
+: "image",
+createdAt:
+typeof raw.createdAt === "string" ? raw.createdAt : new Date().toISOString(),
+};
 }
 
-function mediaArrayFromUnknown(value: unknown): MediaItem[] {
+function normalizeMediaArray(value: unknown): MediaItem[] {
 if (!Array.isArray(value)) return [];
-return value.map(mediaFromUnknown).filter((item): item is MediaItem => Boolean(item));
+return value.map(toMediaItem).filter((item): item is MediaItem => Boolean(item));
 }
 
-function normalizeSite(input?: Partial<SiteData> | null): SiteData {
-const safe = input || {};
+function normalizeReview(value: unknown): ReviewItem | null {
+if (!value || typeof value !== "object") return null;
+
+const raw = value as Record<string, unknown>;
+
+return {
+id: typeof raw.id === "string" ? raw.id : uid(),
+name: typeof raw.name === "string" ? raw.name : "",
+rating:
+typeof raw.rating === "number"
+? Math.max(1, Math.min(5, raw.rating))
+: Number(raw.rating) || 5,
+text: typeof raw.text === "string" ? raw.text : "",
+photos: normalizeMediaArray(raw.photos),
+date: typeof raw.date === "string" ? raw.date : new Date().toLocaleString(),
+};
+}
+
+function normalizeVisit(value: unknown): VisitItem | null {
+if (!value || typeof value !== "object") return null;
+
+const raw = value as Record<string, unknown>;
+
+return {
+id: typeof raw.id === "string" ? raw.id : uid(),
+name: typeof raw.name === "string" ? raw.name : "",
+email: typeof raw.email === "string" ? raw.email : "",
+phone: typeof raw.phone === "string" ? raw.phone : "",
+address: typeof raw.address === "string" ? raw.address : "",
+jobType: typeof raw.jobType === "string" ? raw.jobType : "",
+preferredTime: typeof raw.preferredTime === "string" ? raw.preferredTime : "",
+details: typeof raw.details === "string" ? raw.details : "",
+date: typeof raw.date === "string" ? raw.date : new Date().toLocaleString(),
+};
+}
+
+function normalizePayment(value: unknown): PaymentItem | null {
+if (!value || typeof value !== "object") return null;
+
+const raw = value as Record<string, unknown>;
+
+return {
+id: typeof raw.id === "string" ? raw.id : uid(),
+amount: typeof raw.amount === "string" ? raw.amount : "",
+name: typeof raw.name === "string" ? raw.name : "",
+email: typeof raw.email === "string" ? raw.email : "",
+notes: typeof raw.notes === "string" ? raw.notes : "",
+proofs: normalizeMediaArray(raw.proofs),
+date: typeof raw.date === "string" ? raw.date : new Date().toLocaleString(),
+};
+}
+
+function normalizeSiteData(input: unknown): SiteData {
+if (!input || typeof input !== "object") return DEFAULT_SITE_DATA;
+
+const raw = input as Partial<SiteData>;
 
 const portfolio: Record<Category, MediaItem[]> = {
 "Kitchen Remodel": [],
@@ -217,157 +300,121 @@ const portfolio: Record<Category, MediaItem[]> = {
 Renovation: [],
 };
 
-for (const category of categories) {
-portfolio[category] = mediaArrayFromUnknown(safe.portfolio?.[category]);
+for (const category of CATEGORIES) {
+portfolio[category] = normalizeMediaArray(raw.portfolio?.[category]);
 }
 
+const phoneFromData =
+typeof raw.phoneNumber === "string" && raw.phoneNumber.trim()
+? raw.phoneNumber.trim()
+: DEFAULT_PHONE;
+
 return {
-...defaultData,
-...safe,
-backgroundImage: mediaFromUnknown(safe.backgroundImage) || null,
-heroSectionBackgroundImage: mediaFromUnknown(safe.heroSectionBackgroundImage) || null,
+...DEFAULT_SITE_DATA,
+...raw,
+
+phoneNumber:
+phoneFromData.includes("678") || phoneFromData.includes("555")
+? DEFAULT_PHONE
+: phoneFromData,
+
+backgroundImage: toMediaItem(raw.backgroundImage) || null,
 backgroundBrightness:
-typeof safe.backgroundBrightness === "number"
-? safe.backgroundBrightness
-: defaultData.backgroundBrightness,
+typeof raw.backgroundBrightness === "number"
+? raw.backgroundBrightness
+: DEFAULT_SITE_DATA.backgroundBrightness,
+
+heroSectionBackgroundImage: toMediaItem(raw.heroSectionBackgroundImage) || null,
 heroSectionOverlay:
-typeof safe.heroSectionOverlay === "number"
-? safe.heroSectionOverlay
-: defaultData.heroSectionOverlay,
+typeof raw.heroSectionOverlay === "number"
+? raw.heroSectionOverlay
+: DEFAULT_SITE_DATA.heroSectionOverlay,
+
 portfolio,
-reviews: Array.isArray(safe.reviews) ? safe.reviews : [],
-visits: Array.isArray(safe.visits) ? safe.visits : [],
-payments: Array.isArray(safe.payments) ? safe.payments : [],
+
+reviews: Array.isArray(raw.reviews)
+? raw.reviews.map(normalizeReview).filter((item): item is ReviewItem => Boolean(item))
+: [],
+
+visits: Array.isArray(raw.visits)
+? raw.visits.map(normalizeVisit).filter((item): item is VisitItem => Boolean(item))
+: [],
+
+payments: Array.isArray(raw.payments)
+? raw.payments.map(normalizePayment).filter((item): item is PaymentItem => Boolean(item))
+: [],
 };
 }
 
-function loadLegacyLocalState(): SiteData | null {
-if (typeof window === "undefined") return null;
-
-const settings =
-parseJson(localStorage.getItem("murillo_settings")) ||
-parseJson(localStorage.getItem("siteSettings"));
-const portfolio =
-parseJson(localStorage.getItem("murillo_portfolio")) ||
-parseJson(localStorage.getItem("portfolioStore"));
-
-const hasAnything = settings || portfolio;
-if (!hasAnything) return null;
-
-return normalizeSite({
-businessName: typeof settings?.heroTitle === "string" ? settings.heroTitle : undefined,
-heroSubtitle: typeof settings?.heroSubtitle === "string" ? settings.heroSubtitle : undefined,
-zelleContact: typeof settings?.zelleContact === "string" ? settings.zelleContact : undefined,
-phoneNumber: typeof settings?.phoneNumber === "string" ? settings.phoneNumber : undefined,
-backgroundImage:
-typeof settings?.backgroundImage === "string"
-? { id: uid(), src: settings.backgroundImage }
-: null,
-backgroundBrightness:
-typeof settings?.backgroundBrightness === "number"
-? settings.backgroundBrightness
-: undefined,
-portfolio:
-portfolio && typeof portfolio === "object"
-? {
-"Kitchen Remodel": Array.isArray(portfolio["Kitchen Remodel"])
-? portfolio["Kitchen Remodel"]
-: [],
-"Bathroom Remodel": Array.isArray(portfolio["Bathroom Remodel"])
-? portfolio["Bathroom Remodel"]
-: [],
-"Flooring Project": Array.isArray(portfolio["Flooring Project"])
-? portfolio["Flooring Project"]
-: [],
-"Custom Build": Array.isArray(portfolio["Custom Build"])
-? portfolio["Custom Build"]
-: [],
-"Repair Work": Array.isArray(portfolio["Repair Work"])
-? portfolio["Repair Work"]
-: [],
-Renovation: Array.isArray(portfolio["Renovation"])
-? portfolio["Renovation"]
-: [],
-}
-: undefined,
-});
-}
-
-async function loadState(): Promise<SiteData> {
+async function loadSiteData(): Promise<SiteData> {
 try {
-const db = await openDb();
-
-const stored = await new Promise<unknown>((resolve, reject) => {
-const tx = db.transaction(STORE_NAME, "readonly");
-const store = tx.objectStore(STORE_NAME);
-const req = store.get(STORE_KEY);
-
-req.onsuccess = () => resolve(req.result);
-req.onerror = () => reject(req.error);
+const res = await fetch("/api/site-data", {
+cache: "no-store",
 });
 
-if (stored) {
-return normalizeSite(stored as Partial<SiteData>);
+if (!res.ok) throw new Error("Failed to load site data.");
+
+const json = await res.json();
+return normalizeSiteData(json?.data ?? json);
+} catch (error) {
+console.error("Portfolio site-data load failed:", error);
+return DEFAULT_SITE_DATA;
+}
 }
 
-return loadLegacyLocalState() || defaultData;
-} catch {
-return loadLegacyLocalState() || defaultData;
-}
-}
-
-async function saveState(data: SiteData): Promise<void> {
-const db = await openDb();
-
-await new Promise<void>((resolve, reject) => {
-const tx = db.transaction(STORE_NAME, "readwrite");
-const store = tx.objectStore(STORE_NAME);
-const req = store.put(data, STORE_KEY);
-
-req.onsuccess = () => resolve();
-req.onerror = () => reject(req.error);
+async function saveSiteData(data: SiteData): Promise<void> {
+const res = await fetch("/api/site-data", {
+method: "POST",
+headers: {
+"Content-Type": "application/json",
+},
+body: JSON.stringify({ data }),
 });
+
+if (!res.ok) {
+const json = await res.json().catch(() => ({}));
+throw new Error(json?.error || "Failed to save site data.");
+}
 }
 
-function fileToMedia(file: File): MediaItem {
-return {
-id: uid(),
-name: file.name,
-file,
-};
-}
-
-async function filesToMedia(files: FileList | null): Promise<MediaItem[]> {
+async function uploadFiles(files: FileList | null, folder: string): Promise<MediaItem[]> {
 if (!files?.length) return [];
-return Array.from(files).map(fileToMedia);
+
+const uploaded: MediaItem[] = [];
+
+for (const file of Array.from(files)) {
+const formData = new FormData();
+formData.append("file", file);
+formData.append("folder", folder);
+
+const res = await fetch("/api/blob/upload", {
+method: "POST",
+body: formData,
+});
+
+const json = await res.json().catch(() => ({}));
+
+if (!res.ok || !json?.url) {
+throw new Error(json?.error || `Upload failed for ${file.name}`);
 }
 
-function useMediaUrl(item?: MediaItem | null) {
-const [url, setUrl] = useState("");
-
-useEffect(() => {
-if (!item) {
-setUrl("");
-return;
+uploaded.push({
+id: uid(),
+url: String(json.url),
+src: String(json.url),
+pathname: String(json.pathname || json.url),
+alt: file.name,
+name: file.name,
+createdAt: new Date().toISOString(),
+});
 }
 
-if (item.src) {
-setUrl(item.src);
-return;
+return uploaded;
 }
 
-if (!item.file) {
-setUrl("");
-return;
-}
-
-const objectUrl = URL.createObjectURL(item.file);
-setUrl(objectUrl);
-
-return () => URL.revokeObjectURL(objectUrl);
-}, [item?.id, item?.src, item?.file]);
-
-return url;
+function phoneHref(phone: string) {
+const clean = phone.replace(/[^\d+]/g, "");
+return `tel:${clean}`;
 }
 
 function MediaImage({
@@ -379,17 +426,24 @@ item: MediaItem;
 alt?: string;
 className?: string;
 }) {
-const url = useMediaUrl(item);
-if (!url) return null;
+const src = mediaUrl(item);
+if (!src) return null;
 
-return <img src={url} alt={alt || item.name || "image"} className={className} draggable={false} />;
+return (
+<img
+src={src}
+alt={alt || item.alt || item.name || "image"}
+className={className}
+draggable={false}
+/>
+);
 }
 
 function GlassCard({
 children,
 className = "",
 }: {
-children: React.ReactNode;
+children: ReactNode;
 className?: string;
 }) {
 return (
@@ -404,20 +458,20 @@ className={`rounded-[2rem] border border-white/10 bg-white/[0.05] shadow-[0_10px
 export default function PortfolioPage() {
 const router = useRouter();
 
-const [site, setSite] = useState<SiteData>(defaultData);
+const [site, setSite] = useState<SiteData>(DEFAULT_SITE_DATA);
 const [ready, setReady] = useState(false);
 const [selectedImage, setSelectedImage] = useState<MediaItem | null>(null);
 const [dragCategory, setDragCategory] = useState<Category | null>(null);
 const [saving, setSaving] = useState(false);
 const [notice, setNotice] = useState("");
 
-const pageBackgroundUrl = useMediaUrl(site.backgroundImage);
-const selectedImageUrl = useMediaUrl(selectedImage);
+const pageBackgroundUrl = mediaUrl(site.backgroundImage);
+const selectedImageUrl = mediaUrl(selectedImage);
 
 useEffect(() => {
 let mounted = true;
 
-loadState().then((loaded) => {
+loadSiteData().then((loaded) => {
 if (!mounted) return;
 setSite(loaded);
 setReady(true);
@@ -430,14 +484,19 @@ mounted = false;
 
 useEffect(() => {
 if (!notice) return;
-const timer = window.setTimeout(() => setNotice(""), 1800);
-return () => window.clearTimeout(timer);
+
+const timer = window.setTimeout(() => setNotice(""), 2200);
+
+return () => {
+window.clearTimeout(timer);
+};
 }, [notice]);
 
-const allImages = useMemo(
-() => categories.flatMap((category) => site.portfolio[category]),
-[site.portfolio]
+const allImages = useMemo(() => {
+return CATEGORIES.flatMap((category) => site.portfolio[category]).filter((item) =>
+Boolean(mediaUrl(item))
 );
+}, [site.portfolio]);
 
 const pageBackgroundStyle: CSSProperties = pageBackgroundUrl
 ? {
@@ -451,12 +510,13 @@ background:
 "radial-gradient(circle at top left, rgba(59,130,246,0.18), transparent 28%), radial-gradient(circle at top right, rgba(34,197,94,0.14), transparent 26%), radial-gradient(circle at center, rgba(255,255,255,0.05), transparent 32%), linear-gradient(180deg, rgba(255,255,255,0.04), rgba(0,0,0,0))",
 };
 
-const saveSite = async (next: SiteData) => {
+const saveSite = async (nextSite: SiteData, successMessage = "Saved.") => {
 try {
 setSaving(true);
-await saveState(next);
-setNotice("Saved.");
-} catch {
+await saveSiteData(nextSite);
+setNotice(successMessage);
+} catch (error) {
+console.error(error);
 setNotice("Save failed.");
 } finally {
 setSaving(false);
@@ -464,7 +524,9 @@ setSaving(false);
 };
 
 const upload = async (category: Category, files: FileList | null) => {
-const nextImages = await filesToMedia(files);
+try {
+setNotice("Uploading...");
+const nextImages = await uploadFiles(files, `portfolio/${category}`);
 if (!nextImages.length) return;
 
 const nextSite: SiteData = {
@@ -476,8 +538,11 @@ portfolio: {
 };
 
 setSite(nextSite);
-await saveSite(nextSite);
-setNotice(`${nextImages.length} image(s) added to ${category}.`);
+await saveSite(nextSite, `${nextImages.length} image(s) added to ${category}.`);
+} catch (error) {
+console.error(error);
+setNotice("Upload failed.");
+}
 };
 
 const removeImage = async (category: Category, id: string) => {
@@ -490,8 +555,7 @@ portfolio: {
 };
 
 setSite(nextSite);
-await saveSite(nextSite);
-setNotice("Image removed.");
+await saveSite(nextSite, "Image removed.");
 };
 
 const clearCategory = async (category: Category) => {
@@ -506,16 +570,15 @@ portfolio: {
 };
 
 setSite(nextSite);
-await saveSite(nextSite);
-setNotice(`${category} cleared.`);
+await saveSite(nextSite, `${category} cleared.`);
 };
 
 const onDrop =
 (category: Category) =>
-async (e: React.DragEvent<HTMLDivElement>) => {
-e.preventDefault();
+async (event: React.DragEvent<HTMLDivElement>) => {
+event.preventDefault();
 setDragCategory(null);
-await upload(category, e.dataTransfer.files);
+await upload(category, event.dataTransfer.files);
 };
 
 if (!ready) {
@@ -546,7 +609,10 @@ background:
 <div
 className="fixed inset-0 -z-10"
 style={{
-background: `rgba(0,0,0,${Math.max(0.08, Math.min(0.82, site.backgroundBrightness))})`,
+background: `rgba(0,0,0,${Math.max(
+0.08,
+Math.min(0.82, site.backgroundBrightness)
+)})`,
 }}
 />
 
@@ -568,12 +634,13 @@ className="rounded-full border border-white/10 px-4 py-2 text-sm text-white/80"
 >
 Home
 </button>
-<a href={`tel:${site.phoneNumber}`}>
+
+<a href={phoneHref(site.phoneNumber)}>
 <button
 type="button"
 className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-black"
 >
-Request Visit
+Call Now
 </button>
 </a>
 </div>
@@ -591,9 +658,10 @@ Request Visit
 <p className="text-xs uppercase tracking-[0.3em] text-white/45">Portfolio</p>
 <h1 className="mt-3 text-4xl font-black md:text-6xl">All My Work</h1>
 <p className="mt-3 max-w-3xl text-sm leading-7 text-white/65">
-This page is the full gallery. Drop in a lot of photos, tap any image to open it full screen,
-and keep adding more by category.
+This page is the full gallery. Upload photos, drag and drop work by category, and every
+image saves worldwide through your site data and Blob storage.
 </p>
+
 <div className="mt-4 flex flex-wrap gap-3">
 <button
 type="button"
@@ -602,8 +670,13 @@ className="rounded-full border border-white/10 px-5 py-3 text-sm font-semibold t
 >
 Open Admin
 </button>
+
 <span className="rounded-full border border-white/10 px-4 py-3 text-sm text-white/60">
-{saving ? "Saving..." : "Auto-save ready"}
+{saving ? "Saving..." : "Worldwide save ready"}
+</span>
+
+<span className="rounded-full border border-white/10 px-4 py-3 text-sm text-white/60">
+{allImages.length} total image{allImages.length === 1 ? "" : "s"}
 </span>
 </div>
 </div>
@@ -616,14 +689,18 @@ Every uploaded photo from every category appears here.
 
 {allImages.length > 0 ? (
 <div className="mt-5 columns-1 gap-4 space-y-4 sm:columns-2 xl:columns-3 2xl:columns-4">
-{allImages.map((img, idx) => (
+{allImages.map((img, index) => (
 <button
-key={`${img.id}_${idx}`}
+key={`${img.id}_${index}`}
 type="button"
 onClick={() => setSelectedImage(img)}
 className="break-inside-avoid overflow-hidden rounded-[1.4rem] border border-white/10 bg-white/5"
 >
-<MediaImage item={img} alt={`work ${idx + 1}`} className="h-auto w-full object-cover" />
+<MediaImage
+item={img}
+alt={`work ${index + 1}`}
+className="h-auto w-full object-cover"
+/>
 </button>
 ))}
 </div>
@@ -635,11 +712,11 @@ No photos yet. Upload your work below.
 </GlassCard>
 
 <div className="mt-10 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-{categories.map((category) => (
+{CATEGORIES.map((category) => (
 <div
 key={category}
-onDragOver={(e) => {
-e.preventDefault();
+onDragOver={(event) => {
+event.preventDefault();
 setDragCategory(category);
 }}
 onDragLeave={() => setDragCategory(null)}
@@ -651,7 +728,13 @@ dragCategory === category
 }`}
 >
 <div className="flex items-center justify-between gap-3">
+<div>
 <h3 className="font-semibold">{category}</h3>
+<p className="mt-1 text-xs text-white/45">
+{site.portfolio[category].length} image
+{site.portfolio[category].length === 1 ? "" : "s"}
+</p>
+</div>
 
 <div className="flex gap-2">
 <label className="cursor-pointer rounded-full border border-white/10 px-3 py-2 text-xs text-white/80 hover:bg-white/10">
@@ -661,7 +744,7 @@ type="file"
 multiple
 accept="image/*"
 className="hidden"
-onChange={(e) => upload(category, e.target.files)}
+onChange={(event) => upload(category, event.target.files)}
 />
 </label>
 
@@ -682,9 +765,9 @@ Drag and drop photos here
 <div className="mt-4">
 {site.portfolio[category].length > 0 ? (
 <div className="columns-2 gap-3 space-y-3">
-{site.portfolio[category].map((img, idx) => (
+{site.portfolio[category].map((img, index) => (
 <div
-key={`${category}_${img.id}_${idx}`}
+key={`${category}_${img.id}_${index}`}
 className="break-inside-avoid overflow-hidden rounded-[1.2rem] border border-white/10 bg-black/20"
 >
 <button
@@ -694,15 +777,16 @@ className="block w-full"
 >
 <MediaImage
 item={img}
-alt={`${category} ${idx + 1}`}
+alt={`${category} ${index + 1}`}
 className="h-auto w-full object-cover"
 />
 </button>
 
 <div className="flex items-center justify-between gap-2 p-2">
 <p className="truncate text-[11px] text-white/55">
-{img.name || `${category} image`}
+{img.name || img.alt || `${category} image`}
 </p>
+
 <button
 type="button"
 onClick={() => removeImage(category, img.id)}
@@ -733,7 +817,7 @@ className="fixed inset-0 z-[80] flex items-center justify-center bg-black/90 p-5
 >
 <img
 src={selectedImageUrl}
-alt={selectedImage.name || "selected"}
+alt={selectedImage.alt || selectedImage.name || "selected"}
 className="max-h-[90vh] max-w-[95vw] rounded-3xl shadow-2xl"
 />
 </button>
